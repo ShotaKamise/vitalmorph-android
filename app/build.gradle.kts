@@ -28,6 +28,24 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    val releaseStorePath = providers.gradleProperty("VITALMORPH_STORE_FILE").orNull
+    if (releaseStorePath != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStorePath)
+                storePassword = providers.gradleProperty("VITALMORPH_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("VITALMORPH_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("VITALMORPH_KEY_PASSWORD").get()
+            }
+        }
+        buildTypes {
+            getByName("release") {
+                signingConfig = signingConfigs.getByName("release")
+                isMinifyEnabled = false
+            }
+        }
+    }
+
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }

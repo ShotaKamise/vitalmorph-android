@@ -1,0 +1,41 @@
+name: Publish signed APK
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.VITALMORPH_KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/vitalmorph-release.jks"
+      - name: Test and build signed APK
+        env:
+          STORE_PASSWORD: ${{ secrets.VITALMORPH_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.VITALMORPH_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.VITALMORPH_KEY_PASSWORD }}
+        run: >-
+          ./gradlew test assembleRelease
+          -PVITALMORPH_STORE_FILE="$RUNNER_TEMP/vitalmorph-release.jks"
+          -PVITALMORPH_STORE_PASSWORD="$STORE_PASSWORD"
+          -PVITALMORPH_KEY_ALIAS="$KEY_ALIAS"
+          -PVITALMORPH_KEY_PASSWORD="$KEY_PASSWORD"
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk VitaMorph-${{ github.ref_name }}.apk
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" "VitaMorph-${{ github.ref_name }}.apk" --generate-notes

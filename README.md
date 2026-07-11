@@ -50,7 +50,32 @@ app/build/outputs/apk/debug/app-debug.apk
 
 `main`へpushするとGitHub ActionsがテストとAPKビルドを行います。Actionsの実行結果にある `vitalmorph-debug-apk` からインストール用APKを取得できます。
 
-個人利用の初期版ではdebug APKを使えます。一般公開する場合は、専用の署名鍵を安全な場所に作成し、release APKまたはAABを生成してください。署名鍵やパスワードをGitHubへコミットしないでください。
+個人利用の初期確認ではdebug APKを使えます。ただしGitHub Actionsが毎回作るdebug署名は更新時に変わる可能性があるため、継続利用には署名済みrelease APKを使ってください。
+
+### 継続更新用の署名設定
+
+署名鍵は一度だけ作成し、安全な場所にバックアップします。鍵を失うと、インストール済みアプリを同じアプリとして更新できません。
+
+```bash
+keytool -genkeypair -v -keystore vitalmorph-release.jks \
+  -alias vitalmorph -keyalg RSA -keysize 4096 -validity 10000
+```
+
+GitHubリポジトリの `Settings > Secrets and variables > Actions` に次の4件を登録します。
+
+- `VITALMORPH_KEYSTORE_BASE64`: `base64 < vitalmorph-release.jks | tr -d '\n'` の結果
+- `VITALMORPH_STORE_PASSWORD`: キーストアのパスワード
+- `VITALMORPH_KEY_ALIAS`: `vitalmorph`
+- `VITALMORPH_KEY_PASSWORD`: 鍵のパスワード
+
+その後、タグをpushするとGitHub Releasesへ署名済みAPKが公開されます。
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+署名鍵やパスワードをGitHubへ直接コミットしないでください。
 
 ## 注意
 
