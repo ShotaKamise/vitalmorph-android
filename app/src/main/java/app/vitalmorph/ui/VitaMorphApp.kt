@@ -1,6 +1,5 @@
 package app.vitalmorph.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -8,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -51,11 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -64,7 +58,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.EvolutionResult
-import app.vitalmorph.domain.MonsterFamily
 import app.vitalmorph.domain.MonsterForm
 import app.vitalmorph.domain.MonsterStage
 import app.vitalmorph.domain.TournamentResult
@@ -371,48 +364,6 @@ private fun MonsterHero(evolution: EvolutionResult) {
 }
 
 @Composable
-private fun MonsterVisual(form: MonsterForm, modifier: Modifier = Modifier) {
-    val accent = Color(form.accent)
-    Canvas(modifier = modifier.aspectRatio(1f)) {
-        val center = Offset(size.width / 2, size.height * 0.54f)
-        val radius = size.minDimension * if (form.stage == MonsterStage.BABY) 0.30f else 0.34f
-        drawCircle(accent.copy(alpha = 0.15f), radius * 1.35f, center)
-        drawOval(accent, topLeft = Offset(center.x - radius, center.y - radius * 0.88f), size = Size(radius * 2, radius * 1.8f))
-        val path = Path()
-        when (form.family) {
-            MonsterFamily.POWER -> {
-                path.moveTo(center.x - radius * 0.75f, center.y - radius * 0.55f)
-                path.lineTo(center.x - radius * 1.05f, center.y - radius * 1.15f)
-                path.lineTo(center.x - radius * 0.30f, center.y - radius * 0.80f)
-                path.moveTo(center.x + radius * 0.75f, center.y - radius * 0.55f)
-                path.lineTo(center.x + radius * 1.05f, center.y - radius * 1.15f)
-                path.lineTo(center.x + radius * 0.30f, center.y - radius * 0.80f)
-            }
-            MonsterFamily.SPEED, MonsterFamily.OVERDRIVE -> {
-                path.moveTo(center.x - radius * 0.45f, center.y - radius * 0.75f)
-                path.lineTo(center.x - radius * 0.85f, center.y - radius * 1.40f)
-                path.lineTo(center.x - radius * 0.05f, center.y - radius * 0.85f)
-                path.moveTo(center.x + radius * 0.45f, center.y - radius * 0.75f)
-                path.lineTo(center.x + radius * 0.85f, center.y - radius * 1.40f)
-                path.lineTo(center.x + radius * 0.05f, center.y - radius * 0.85f)
-            }
-            else -> {
-                path.moveTo(center.x - radius * 0.55f, center.y - radius * 0.70f)
-                path.quadraticTo(center.x - radius, center.y - radius * 1.2f, center.x - radius * 0.85f, center.y - radius * 0.30f)
-                path.moveTo(center.x + radius * 0.55f, center.y - radius * 0.70f)
-                path.quadraticTo(center.x + radius, center.y - radius * 1.2f, center.x + radius * 0.85f, center.y - radius * 0.30f)
-            }
-        }
-        drawPath(path, accent, style = Stroke(width = radius * 0.22f))
-        drawCircle(Color(0xFF07111D), radius * 0.12f, Offset(center.x - radius * 0.35f, center.y - radius * 0.15f))
-        drawCircle(Color(0xFF07111D), radius * 0.12f, Offset(center.x + radius * 0.35f, center.y - radius * 0.15f))
-        drawCircle(Color.White, radius * 0.035f, Offset(center.x - radius * 0.38f, center.y - radius * 0.18f))
-        drawCircle(Color.White, radius * 0.035f, Offset(center.x + radius * 0.32f, center.y - radius * 0.18f))
-        drawArc(Color(0xFF07111D), 20f, 140f, false, Offset(center.x - radius * 0.28f, center.y), Size(radius * 0.56f, radius * 0.35f), style = Stroke(radius * 0.06f))
-    }
-}
-
-@Composable
 private fun MetricCard(title: String, value: String, subtitle: String, modifier: Modifier = Modifier) {
     ElevatedCard(modifier = modifier) {
         Column(Modifier.padding(14.dp)) {
@@ -438,7 +389,7 @@ private fun EvolutionScreen(evolution: EvolutionResult?) {
         items(evolution.path) { form ->
             ElevatedCard {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).background(Color(form.accent), CircleShape))
+                    MonsterVisual(form, Modifier.size(64.dp), showAura = false)
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(form.stage.label, style = MaterialTheme.typography.labelMedium)
@@ -492,6 +443,8 @@ private fun ScoreBar(label: String, score: Int) {
 
 @Composable
 private fun ArenaScreen(state: GameUiState, onTournament: () -> Unit) {
+    val currentForm = state.evolution?.form
+    val featuredOpponent = state.tournament?.matches?.lastOrNull()?.opponent ?: "アーク・チャレンジャー"
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -501,22 +454,50 @@ private fun ArenaScreen(state: GameUiState, onTournament: () -> Unit) {
             SectionTitle("CPUオートトーナメント")
             Text("8体参加。準々決勝から決勝まで自動で戦い、結果をダイジェスト表示します。")
         }
+        if (currentForm != null) {
+            item { BattleStage(currentForm, featuredOpponent, state.tournament != null) }
+        }
         item {
             Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onTournament) {
                 Text(if (state.tournament == null) "大会に参加する" else "再戦する")
             }
         }
         state.tournament?.let { result ->
-            item { TournamentSummary(result) }
+            item { TournamentSummary(result, currentForm) }
             items(result.matches) { match ->
                 ElevatedCard {
-                    Column(Modifier.padding(16.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(match.round, fontWeight = FontWeight.Bold)
                             Text(if (match.won) "WIN" else "LOSE", color = if (match.won) Mint else Color(0xFFFF7777))
                         }
-                        Text("VS ${match.opponent}")
-                        Text("${match.playerScore} - ${match.opponentScore}", fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            currentForm?.let {
+                                MonsterVisual(
+                                    form = it,
+                                    modifier = Modifier.size(72.dp),
+                                    motion = if (match.won) MonsterMotion.VICTORY else MonsterMotion.HIT,
+                                    showAura = false,
+                                )
+                            }
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("VS ${match.opponent}", textAlign = TextAlign.Center)
+                                Text("${match.playerScore} - ${match.opponentScore}", fontSize = 24.sp, fontWeight = FontWeight.Black)
+                            }
+                            MonsterSprite(
+                                drawableRes = MonsterArtwork.resourceForOpponent(match.opponent),
+                                contentDescription = match.opponent,
+                                accent = Color(0xFFB89CFF),
+                                modifier = Modifier.size(72.dp),
+                                motion = if (match.won) MonsterMotion.HIT else MonsterMotion.VICTORY,
+                                facingRight = false,
+                                showAura = false,
+                            )
+                        }
                     }
                 }
             }
@@ -525,9 +506,56 @@ private fun ArenaScreen(state: GameUiState, onTournament: () -> Unit) {
 }
 
 @Composable
-private fun TournamentSummary(result: TournamentResult) {
+private fun BattleStage(form: MonsterForm, opponent: String, completed: Boolean) {
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = Color(form.accent).copy(alpha = 0.10f)),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(if (completed) "BATTLE REPLAY" else "NEXT BATTLE", color = Gold, fontWeight = FontWeight.Black)
+            Row(
+                Modifier.fillMaxWidth().height(176.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    MonsterVisual(
+                        form = form,
+                        modifier = Modifier.size(140.dp),
+                        motion = MonsterMotion.ATTACK,
+                    )
+                    Text("YOU", color = Color(form.accent), fontWeight = FontWeight.Bold)
+                }
+                Text("VS", color = Gold, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    MonsterSprite(
+                        drawableRes = MonsterArtwork.resourceForOpponent(opponent),
+                        contentDescription = opponent,
+                        accent = Color(0xFFB89CFF),
+                        modifier = Modifier.size(140.dp),
+                        motion = MonsterMotion.HIT,
+                        facingRight = false,
+                    )
+                    Text("CPU", color = Color(0xFFB89CFF), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TournamentSummary(result: TournamentResult, form: MonsterForm?) {
     ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Gold.copy(alpha = 0.12f))) {
         Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            form?.let {
+                MonsterVisual(
+                    form = it,
+                    modifier = Modifier.size(126.dp),
+                    motion = if (result.placement == 1) MonsterMotion.VICTORY else MonsterMotion.IDLE,
+                )
+            }
             Text(if (result.placement == 1) "CHAMPION" else "TOP ${result.placement}", color = Gold, fontWeight = FontWeight.Black)
             Text("大会ポイント +${result.tournamentPoints}", fontSize = 20.sp)
         }
