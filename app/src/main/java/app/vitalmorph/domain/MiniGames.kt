@@ -126,8 +126,28 @@ object MiniGameRules {
         MiniGameDifficulty.ONI -> 21
     }
 
-    // ---- ミールバランス: 主要栄養素あてクイズ ----
-    val mealQuestions: List<MealQuestion> = listOf(
+    // ---- ミールバランス: 主要栄養素あてクイズ(U7で難易度別プール化) ----
+    /**
+     * 初級プール: 直感でまず外さない定番食材のみ。標準プールの部分集合。
+     * たんぱく質・脂質・炭水化物の3栄養素をひととおり含む。
+     */
+    val mealQuestionsBasic: List<MealQuestion> = listOf(
+        MealQuestion("鶏むね肉", MacroNutrient.PROTEIN),
+        MealQuestion("ゆで卵", MacroNutrient.PROTEIN),
+        MealQuestion("サケの切り身", MacroNutrient.PROTEIN),
+        MealQuestion("バター", MacroNutrient.FAT),
+        MealQuestion("オリーブオイル", MacroNutrient.FAT),
+        MealQuestion("マヨネーズ", MacroNutrient.FAT),
+        MealQuestion("ごはん", MacroNutrient.CARBS),
+        MealQuestion("食パン", MacroNutrient.CARBS),
+        MealQuestion("パスタ", MacroNutrient.CARBS),
+        MealQuestion("バナナ", MacroNutrient.CARBS),
+        MealQuestion("じゃがいも", MacroNutrient.CARBS),
+        MealQuestion("うどん", MacroNutrient.CARBS),
+    )
+
+    /** 標準プール: 中級の20問。定番から少しだけ考える食材まで。 */
+    val mealQuestionsStandard: List<MealQuestion> = listOf(
         MealQuestion("鶏むね肉", MacroNutrient.PROTEIN),
         MealQuestion("ゆで卵", MacroNutrient.PROTEIN),
         MealQuestion("木綿豆腐", MacroNutrient.PROTEIN),
@@ -150,12 +170,51 @@ object MiniGameRules {
         MealQuestion("さつまいも", MacroNutrient.CARBS),
     )
 
-    const val MEAL_ROUNDS = 10
-    const val MEAL_SUCCESS_SCORE = 7
+    /**
+     * 紛らわしいプール(上級・鬼)。名前や見た目から主要栄養素を外しやすい食材。
+     * 正解はエネルギー寄与・主要成分(g)で妥当なものを設定している。
+     * 例: ぎんなん/栗は「木の実」でも実体はでんぷん中心の炭水化物、油揚げ/ベーコンは脂質過多。
+     */
+    val mealQuestionsTricky: List<MealQuestion> = listOf(
+        MealQuestion("かぼちゃ", MacroNutrient.CARBS),
+        MealQuestion("春雨", MacroNutrient.CARBS),
+        MealQuestion("枝豆", MacroNutrient.PROTEIN),
+        MealQuestion("カシューナッツ", MacroNutrient.FAT),
+        MealQuestion("栗", MacroNutrient.CARBS),
+        MealQuestion("うずらの卵", MacroNutrient.PROTEIN),
+        MealQuestion("生クリーム", MacroNutrient.FAT),
+        MealQuestion("とうもろこし", MacroNutrient.CARBS),
+        MealQuestion("油揚げ", MacroNutrient.FAT),
+        MealQuestion("えび", MacroNutrient.PROTEIN),
+        MealQuestion("ぎんなん", MacroNutrient.CARBS),
+        MealQuestion("ベーコン", MacroNutrient.FAT),
+    )
 
-    /** 出題順を決定的にシャッフルして10問選ぶ。 */
-    fun mealRound(seed: Int): List<MealQuestion> =
-        mealQuestions.shuffled(Random(seed)).take(MEAL_ROUNDS)
+    const val MEAL_ROUNDS = 10
+
+    /**
+     * 難易度ごとの出題プール。
+     * 初級=定番のみ、中級=標準20問、上級=標準+紛らわしい、鬼=紛らわしいのみ。
+     * 上級プールは標準と紛らわしいで食材名が重複しない前提(テストで担保)。
+     */
+    fun mealPool(difficulty: MiniGameDifficulty): List<MealQuestion> = when (difficulty) {
+        MiniGameDifficulty.EASY -> mealQuestionsBasic
+        MiniGameDifficulty.NORMAL -> mealQuestionsStandard
+        MiniGameDifficulty.HARD -> mealQuestionsStandard + mealQuestionsTricky
+        MiniGameDifficulty.ONI -> mealQuestionsTricky
+    }
+
+    /** 難易度ごとの成功しきい値(この問数以上の正解でクリア)。難易度が上がるほど高い。 */
+    fun mealSuccessScore(difficulty: MiniGameDifficulty): Int = when (difficulty) {
+        MiniGameDifficulty.EASY -> 7
+        MiniGameDifficulty.NORMAL -> 7
+        MiniGameDifficulty.HARD -> 8
+        MiniGameDifficulty.ONI -> 9
+    }
+
+    /** 難易度プールから出題順を決定的にシャッフルして10問選ぶ。 */
+    fun mealRound(seed: Int, difficulty: MiniGameDifficulty): List<MealQuestion> =
+        mealPool(difficulty).shuffled(Random(seed)).take(MEAL_ROUNDS)
 
     fun maxScoreFor(kind: MiniGameKind): Int = when (kind) {
         MiniGameKind.CORE_CATCH -> CORE_CATCH_CELLS
@@ -176,7 +235,7 @@ object MiniGameRules {
         val threshold = when (kind) {
             MiniGameKind.CORE_CATCH -> CORE_CATCH_CELLS
             MiniGameKind.PULSE_TRAINING -> pulseSuccessScore(difficulty)
-            MiniGameKind.MEAL_BALANCE -> MEAL_SUCCESS_SCORE
+            MiniGameKind.MEAL_BALANCE -> mealSuccessScore(difficulty)
         }
         val clamped = score.coerceIn(0, max)
         return MiniGameResult(kind, clamped, max, clamped >= threshold, difficulty)

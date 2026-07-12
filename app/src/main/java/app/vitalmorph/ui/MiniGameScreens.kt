@@ -95,7 +95,6 @@ fun MiniGameOverlay(
                 when (kind) {
                     MiniGameKind.CORE_CATCH -> CoreCatchGame(seed, selected, onFinish)
                     MiniGameKind.PULSE_TRAINING -> PulseTrainingGame(selected, onFinish)
-                    // TODO(U7): ミールバランスの難易度別チューニング。今は難易度を受け取り結果へ渡すのみ。
                     MiniGameKind.MEAL_BALANCE -> MealBalanceGame(seed, selected, onFinish)
                 }
             }
@@ -114,7 +113,8 @@ private fun DifficultySelector(kind: MiniGameKind, onSelect: (MiniGameDifficulty
                     "制限時間 ${MiniGameRules.coreCatchTimeLimitMs(difficulty) / 1000}秒"
                 MiniGameKind.PULSE_TRAINING ->
                     "速度 ${MiniGameRules.pulseCycleMs(difficulty)}ms・${MiniGameRules.pulseSuccessScore(difficulty)}点でクリア"
-                else -> "機嫌+${MiniGameRules.successMood(difficulty)}・絆+${MiniGameRules.successBond(difficulty)}"
+                MiniGameKind.MEAL_BALANCE ->
+                    "${MiniGameRules.mealSuccessScore(difficulty)}問正解でクリア・機嫌+${MiniGameRules.successMood(difficulty)}"
             }
             Button(
                 modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -319,7 +319,7 @@ private fun PulseTrainingGame(difficulty: MiniGameDifficulty, onFinish: (Int, Mi
 
 @Composable
 private fun MealBalanceGame(seed: Int, difficulty: MiniGameDifficulty, onFinish: (Int, MiniGameDifficulty) -> Unit) {
-    val questions = remember(seed) { MiniGameRules.mealRound(seed) }
+    val questions = remember(seed, difficulty) { MiniGameRules.mealRound(seed, difficulty) }
     var index by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
     var feedback by remember { mutableStateOf<String?>(null) }
@@ -369,7 +369,7 @@ private fun MealBalanceGame(seed: Int, difficulty: MiniGameDifficulty, onFinish:
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "${MiniGameRules.MEAL_SUCCESS_SCORE}問正解でクリア！ まちがえても大丈夫。",
+            "${MiniGameRules.mealSuccessScore(difficulty)}問正解でクリア！まちがえても大丈夫。",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f),
         )

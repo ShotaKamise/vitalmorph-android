@@ -68,7 +68,10 @@ class MiniGameRulesTest {
 
     @Test
     fun `resultFor defaults difficulty to normal`() {
-        val result = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, MiniGameRules.MEAL_SUCCESS_SCORE)
+        val result = MiniGameRules.resultFor(
+            MiniGameKind.MEAL_BALANCE,
+            MiniGameRules.mealSuccessScore(MiniGameDifficulty.NORMAL),
+        )
         assertEquals(MiniGameDifficulty.NORMAL, result.difficulty)
     }
 
@@ -152,28 +155,101 @@ class MiniGameRulesTest {
     }
 
     @Test
-    fun `meal round picks ten unique deterministic questions`() {
-        val round = MiniGameRules.mealRound(seed = 3)
-        assertEquals(MiniGameRules.MEAL_ROUNDS, round.size)
-        assertEquals(round.map { it.foodName }.toSet().size, round.size)
-        assertEquals(round, MiniGameRules.mealRound(seed = 3))
+    fun `meal basic pool is at least ten items and a subset of standard`() {
+        assertTrue(MiniGameRules.mealQuestionsBasic.size >= 10)
+        val standardNames = MiniGameRules.mealQuestionsStandard.map { it.foodName }.toSet()
+        MiniGameRules.mealQuestionsBasic.forEach { q ->
+            assertTrue("${q.foodName} は標準プールにない", q.foodName in standardNames)
+            // 部分集合なので正解も標準と一致していること。
+            val standard = MiniGameRules.mealQuestionsStandard.first { it.foodName == q.foodName }
+            assertEquals(standard.answer, q.answer)
+        }
     }
 
     @Test
-    fun `meal questions cover all three macros`() {
-        val answers = MiniGameRules.mealQuestions.map { it.answer }.toSet()
-        assertEquals(MacroNutrient.entries.toSet(), answers)
+    fun `meal tricky pool has at least ten items with non-null answers`() {
+        assertTrue(MiniGameRules.mealQuestionsTricky.size >= 10)
+        MiniGameRules.mealQuestionsTricky.forEach { q ->
+            @Suppress("SENSELESS_COMPARISON")
+            assertTrue("${q.foodName} の正解が未設定", q.answer != null)
+        }
+    }
+
+    @Test
+    fun `each meal pool covers all three macros with unique food names`() {
+        for (difficulty in MiniGameDifficulty.entries) {
+            val pool = MiniGameRules.mealPool(difficulty)
+            val answers = pool.map { it.answer }.toSet()
+            assertEquals("$difficulty プールが3栄養素を網羅していない", MacroNutrient.entries.toSet(), answers)
+            assertEquals(
+                "$difficulty プールに重複食材がある",
+                pool.size,
+                pool.map { it.foodName }.toSet().size,
+            )
+        }
+    }
+
+    @Test
+    fun `meal pools map difficulty to the expected tier`() {
+        assertEquals(MiniGameRules.mealQuestionsBasic, MiniGameRules.mealPool(MiniGameDifficulty.EASY))
+        assertEquals(MiniGameRules.mealQuestionsStandard, MiniGameRules.mealPool(MiniGameDifficulty.NORMAL))
         assertEquals(
-            MiniGameRules.mealQuestions.size,
-            MiniGameRules.mealQuestions.map { it.foodName }.toSet().size,
+            MiniGameRules.mealQuestionsStandard + MiniGameRules.mealQuestionsTricky,
+            MiniGameRules.mealPool(MiniGameDifficulty.HARD),
         )
+        // 鬼は紛らわしいプールのみ。
+        assertEquals(MiniGameRules.mealQuestionsTricky, MiniGameRules.mealPool(MiniGameDifficulty.ONI))
+    }
+
+    @Test
+    fun `meal round picks ten unique deterministic questions from the right pool`() {
+        for (difficulty in MiniGameDifficulty.entries) {
+            val round = MiniGameRules.mealRound(seed = 3, difficulty = difficulty)
+            assertEquals(MiniGameRules.MEAL_ROUNDS, round.size)
+            // 10問すべて食材名が重複しない。
+            assertEquals(round.map { it.foodName }.toSet().size, round.size)
+            // 決定的: 同じ(seed, 難易度)なら同じ出題。
+            assertEquals(round, MiniGameRules.mealRound(seed = 3, difficulty = difficulty))
+            // 出題はその難易度のプールから引かれている。
+            val poolNames = MiniGameRules.mealPool(difficulty).map { it.foodName }.toSet()
+            assertTrue(round.all { it.foodName in poolNames })
+        }
+    }
+
+    @Test
+    fun `meal success score rises with difficulty`() {
+        assertEquals(7, MiniGameRules.mealSuccessScore(MiniGameDifficulty.EASY))
+        assertEquals(7, MiniGameRules.mealSuccessScore(MiniGameDifficulty.NORMAL))
+        assertEquals(8, MiniGameRules.mealSuccessScore(MiniGameDifficulty.HARD))
+        assertEquals(9, MiniGameRules.mealSuccessScore(MiniGameDifficulty.ONI))
+    }
+
+    @Test
+    fun `meal result uses difficulty specific success threshold`() {
+        for (d in MiniGameDifficulty.entries) {
+            val threshold = MiniGameRules.mealSuccessScore(d)
+            val atThreshold = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, threshold, d)
+            assertTrue(atThreshold.success)
+            assertEquals(d, atThreshold.difficulty)
+            val below = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, threshold - 1, d)
+            assertFalse(below.success)
+        }
+        // 2引数オーバーロードは中級として判定する(7問でクリア)。
+        assertTrue(MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, 7).success)
+        assertFalse(MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, 6).success)
     }
 
     @Test
     fun `result clamps score and applies thresholds`() {
-        val success = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, MiniGameRules.MEAL_SUCCESS_SCORE)
+        val success = MiniGameRules.resultFor(
+            MiniGameKind.MEAL_BALANCE,
+            MiniGameRules.mealSuccessScore(MiniGameDifficulty.NORMAL),
+        )
         assertTrue(success.success)
-        val fail = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, MiniGameRules.MEAL_SUCCESS_SCORE - 1)
+        val fail = MiniGameRules.resultFor(
+            MiniGameKind.MEAL_BALANCE,
+            MiniGameRules.mealSuccessScore(MiniGameDifficulty.NORMAL) - 1,
+        )
         assertFalse(fail.success)
         val clamped = MiniGameRules.resultFor(MiniGameKind.CORE_CATCH, 999)
         assertEquals(MiniGameRules.CORE_CATCH_CELLS, clamped.score)
