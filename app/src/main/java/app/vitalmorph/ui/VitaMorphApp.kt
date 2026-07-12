@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -200,13 +201,13 @@ private fun LoadingScreen() {
 
 @Composable
 private fun OnboardingScreen(onFinish: (UserGoals, Boolean) -> Unit) {
-    var calories by remember { mutableStateOf("2000") }
-    var protein by remember { mutableStateOf("80") }
-    var carbs by remember { mutableStateOf("250") }
-    var fat by remember { mutableStateOf("60") }
-    var steps by remember { mutableStateOf("8000") }
-    var exercise by remember { mutableStateOf("150") }
-    var demoMode by remember { mutableStateOf(false) }
+    var calories by rememberSaveable { mutableStateOf("2000") }
+    var protein by rememberSaveable { mutableStateOf("80") }
+    var carbs by rememberSaveable { mutableStateOf("250") }
+    var fat by rememberSaveable { mutableStateOf("60") }
+    var steps by rememberSaveable { mutableStateOf("8000") }
+    var exercise by rememberSaveable { mutableStateOf("150") }
+    var demoMode by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 24.dp),
