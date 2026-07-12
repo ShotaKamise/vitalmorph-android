@@ -6,7 +6,7 @@ import kotlin.random.Random
 /** ミニゲームの種類(IMPLEMENTATION_PLAN.md Phase 3)。1回60〜90秒。 */
 enum class MiniGameKind(val label: String, val summary: String) {
     CORE_CATCH("コアキャッチ", "1から25まで順番にタップ！時間内にコンプリートでクリア！"),
-    PULSE_TRAINING("パルストレーニング", "パルスがリングに重なる瞬間にタップ！"),
+    PULSE_TRAINING("パルストレーニング", "パルスがリングに重なる瞬間にタップ！難易度でスピードが変わる。"),
     MEAL_BALANCE("ミールバランス", "食べ物のいちばん多い栄養素を当てよう！"),
 }
 
@@ -88,21 +88,43 @@ object MiniGameRules {
 
     // ---- パルストレーニング: リングが閉じる瞬間(progress=1.0)にタップ ----
     const val PULSE_ROUNDS = 10
-    const val PULSE_CYCLE_MS = 1_400
+    const val PULSE_MAX_SCORE = PULSE_ROUNDS * 3
 
-    /** タップ時の進行度(0.0〜1.0)から得点を判定する。1.0ちょうどが最高。 */
-    fun pulseJudge(progress: Float): Int {
+    /** 難易度ごとのリング1周にかかる時間(ミリ秒)。速いほどタイミングが難しい。 */
+    fun pulseCycleMs(difficulty: MiniGameDifficulty): Int = when (difficulty) {
+        MiniGameDifficulty.EASY -> 1_400
+        MiniGameDifficulty.NORMAL -> 1_000
+        MiniGameDifficulty.HARD -> 750
+        MiniGameDifficulty.ONI -> 550
+    }
+
+    /**
+     * タップ時の進行度(0.0〜1.0)から得点を判定する。1.0ちょうどが最高。
+     * 誤差(|1 - progress|)の許容幅は難易度が上がるほど狭くなる。境界(==)は内側扱い。
+     */
+    fun pulseJudge(progress: Float, difficulty: MiniGameDifficulty): Int {
         val error = abs(1f - progress)
+        val (perfect, good, ok) = when (difficulty) {
+            MiniGameDifficulty.EASY -> Triple(0.10f, 0.20f, 0.32f)
+            MiniGameDifficulty.NORMAL -> Triple(0.08f, 0.18f, 0.30f)
+            MiniGameDifficulty.HARD -> Triple(0.06f, 0.13f, 0.22f)
+            MiniGameDifficulty.ONI -> Triple(0.04f, 0.09f, 0.15f)
+        }
         return when {
-            error <= 0.08f -> 3
-            error <= 0.18f -> 2
-            error <= 0.30f -> 1
+            error <= perfect -> 3
+            error <= good -> 2
+            error <= ok -> 1
             else -> 0
         }
     }
 
-    const val PULSE_MAX_SCORE = PULSE_ROUNDS * 3
-    const val PULSE_SUCCESS_SCORE = 16
+    /** 難易度ごとの成功しきい値(この点以上でクリア)。難易度が上がるほど高い。 */
+    fun pulseSuccessScore(difficulty: MiniGameDifficulty): Int = when (difficulty) {
+        MiniGameDifficulty.EASY -> 14
+        MiniGameDifficulty.NORMAL -> 16
+        MiniGameDifficulty.HARD -> 18
+        MiniGameDifficulty.ONI -> 21
+    }
 
     // ---- ミールバランス: 主要栄養素あてクイズ ----
     val mealQuestions: List<MealQuestion> = listOf(
@@ -153,7 +175,7 @@ object MiniGameRules {
         val max = maxScoreFor(kind)
         val threshold = when (kind) {
             MiniGameKind.CORE_CATCH -> CORE_CATCH_CELLS
-            MiniGameKind.PULSE_TRAINING -> PULSE_SUCCESS_SCORE
+            MiniGameKind.PULSE_TRAINING -> pulseSuccessScore(difficulty)
             MiniGameKind.MEAL_BALANCE -> MEAL_SUCCESS_SCORE
         }
         val clamped = score.coerceIn(0, max)

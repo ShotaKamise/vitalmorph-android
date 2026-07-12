@@ -94,7 +94,6 @@ fun MiniGameOverlay(
             } else {
                 when (kind) {
                     MiniGameKind.CORE_CATCH -> CoreCatchGame(seed, selected, onFinish)
-                    // TODO(U6): パルストレーニングの難易度別チューニング。今は難易度を受け取り結果へ渡すのみ。
                     MiniGameKind.PULSE_TRAINING -> PulseTrainingGame(selected, onFinish)
                     // TODO(U7): ミールバランスの難易度別チューニング。今は難易度を受け取り結果へ渡すのみ。
                     MiniGameKind.MEAL_BALANCE -> MealBalanceGame(seed, selected, onFinish)
@@ -113,6 +112,8 @@ private fun DifficultySelector(kind: MiniGameKind, onSelect: (MiniGameDifficulty
             val brief = when (kind) {
                 MiniGameKind.CORE_CATCH ->
                     "制限時間 ${MiniGameRules.coreCatchTimeLimitMs(difficulty) / 1000}秒"
+                MiniGameKind.PULSE_TRAINING ->
+                    "速度 ${MiniGameRules.pulseCycleMs(difficulty)}ms・${MiniGameRules.pulseSuccessScore(difficulty)}点でクリア"
                 else -> "機嫌+${MiniGameRules.successMood(difficulty)}・絆+${MiniGameRules.successBond(difficulty)}"
             }
             Button(
@@ -257,6 +258,8 @@ private fun PulseTrainingGame(difficulty: MiniGameDifficulty, onFinish: (Int, Mi
     var lastJudge by remember { mutableStateOf<String?>(null) }
     val progress = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
+    val cycleMs = remember(difficulty) { MiniGameRules.pulseCycleMs(difficulty) }
+    val successScore = remember(difficulty) { MiniGameRules.pulseSuccessScore(difficulty) }
 
     LaunchedEffect(round) {
         if (round >= MiniGameRules.PULSE_ROUNDS) {
@@ -264,7 +267,7 @@ private fun PulseTrainingGame(difficulty: MiniGameDifficulty, onFinish: (Int, Mi
             return@LaunchedEffect
         }
         progress.snapTo(0f)
-        progress.animateTo(1f, tween(MiniGameRules.PULSE_CYCLE_MS, easing = LinearEasing))
+        progress.animateTo(1f, tween(cycleMs, easing = LinearEasing))
         // タップされないまま閉じ切ったらミス扱いで次へ。
         lastJudge = "ミス…"
         round++
@@ -272,7 +275,7 @@ private fun PulseTrainingGame(difficulty: MiniGameDifficulty, onFinish: (Int, Mi
 
     fun tap() {
         if (round >= MiniGameRules.PULSE_ROUNDS) return
-        val gained = MiniGameRules.pulseJudge(progress.value)
+        val gained = MiniGameRules.pulseJudge(progress.value, difficulty)
         score += gained
         lastJudge = when (gained) {
             3 -> "パーフェクト！ +3"
@@ -307,7 +310,7 @@ private fun PulseTrainingGame(difficulty: MiniGameDifficulty, onFinish: (Int, Mi
         Spacer(Modifier.height(12.dp))
         Text(lastJudge ?: "リングが重なる瞬間にタップ", color = AccentGold, fontWeight = FontWeight.Bold)
         Text(
-            "${MiniGameRules.PULSE_SUCCESS_SCORE}点以上でクリア！",
+            "$successScore 点以上でクリア！(1周 ${cycleMs}ms)",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f),
         )

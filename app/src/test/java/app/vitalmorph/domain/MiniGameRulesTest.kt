@@ -73,13 +73,82 @@ class MiniGameRulesTest {
     }
 
     @Test
-    fun `pulse judge rewards accurate timing`() {
-        assertEquals(3, MiniGameRules.pulseJudge(1.0f))
-        assertEquals(3, MiniGameRules.pulseJudge(0.93f))
-        assertEquals(2, MiniGameRules.pulseJudge(0.85f))
-        assertEquals(1, MiniGameRules.pulseJudge(0.72f))
-        assertEquals(0, MiniGameRules.pulseJudge(0.5f))
-        assertEquals(0, MiniGameRules.pulseJudge(0.0f))
+    fun `pulse cycle speeds up with difficulty`() {
+        assertEquals(1_400, MiniGameRules.pulseCycleMs(MiniGameDifficulty.EASY))
+        assertEquals(1_000, MiniGameRules.pulseCycleMs(MiniGameDifficulty.NORMAL))
+        assertEquals(750, MiniGameRules.pulseCycleMs(MiniGameDifficulty.HARD))
+        assertEquals(550, MiniGameRules.pulseCycleMs(MiniGameDifficulty.ONI))
+    }
+
+    @Test
+    fun `pulse judge windows for normal match legacy behavior`() {
+        val d = MiniGameDifficulty.NORMAL
+        assertEquals(3, MiniGameRules.pulseJudge(1.0f, d))
+        assertEquals(3, MiniGameRules.pulseJudge(0.93f, d)) // error 0.07 <= 0.08
+        assertEquals(2, MiniGameRules.pulseJudge(0.85f, d)) // error 0.15 <= 0.18
+        assertEquals(1, MiniGameRules.pulseJudge(0.72f, d)) // error 0.28 <= 0.30
+        assertEquals(0, MiniGameRules.pulseJudge(0.5f, d))
+        assertEquals(0, MiniGameRules.pulseJudge(0.0f, d))
+    }
+
+    @Test
+    fun `pulse judge windows for easy are wide with clear band edges`() {
+        val d = MiniGameDifficulty.EASY // 3点<=0.10 / 2点<=0.20 / 1点<=0.32
+        // 3点↔2点(誤差0.10付近): 内側は3点、外側は2点
+        assertEquals(3, MiniGameRules.pulseJudge(0.905f, d)) // 誤差約0.095
+        assertEquals(2, MiniGameRules.pulseJudge(0.895f, d)) // 誤差約0.105
+        // 2点↔1点(誤差0.20付近)
+        assertEquals(2, MiniGameRules.pulseJudge(0.81f, d)) // 誤差約0.19
+        assertEquals(1, MiniGameRules.pulseJudge(0.795f, d)) // 誤差約0.205
+        // 1点↔0点(誤差0.32付近)
+        assertEquals(1, MiniGameRules.pulseJudge(0.69f, d)) // 誤差約0.31
+        assertEquals(0, MiniGameRules.pulseJudge(0.675f, d)) // 誤差約0.325
+    }
+
+    @Test
+    fun `pulse judge windows for hard are narrow`() {
+        val d = MiniGameDifficulty.HARD // 3点<=0.06 / 2点<=0.13 / 1点<=0.22
+        assertEquals(3, MiniGameRules.pulseJudge(0.945f, d)) // 誤差約0.055
+        assertEquals(2, MiniGameRules.pulseJudge(0.875f, d)) // 誤差約0.125
+        assertEquals(1, MiniGameRules.pulseJudge(0.785f, d)) // 誤差約0.215
+        assertEquals(0, MiniGameRules.pulseJudge(0.78f, d)) // 誤差約0.22超で0点
+    }
+
+    @Test
+    fun `pulse judge windows for oni are tightest with clear band edges`() {
+        val d = MiniGameDifficulty.ONI // 3点<=0.04 / 2点<=0.09 / 1点<=0.15
+        // 3点↔2点(誤差0.04付近)
+        assertEquals(3, MiniGameRules.pulseJudge(0.965f, d)) // 誤差約0.035
+        assertEquals(2, MiniGameRules.pulseJudge(0.955f, d)) // 誤差約0.045
+        // 2点↔1点(誤差0.09付近)
+        assertEquals(2, MiniGameRules.pulseJudge(0.915f, d)) // 誤差約0.085
+        assertEquals(1, MiniGameRules.pulseJudge(0.905f, d)) // 誤差約0.095
+        // 1点↔0点(誤差0.15付近)
+        assertEquals(1, MiniGameRules.pulseJudge(0.855f, d)) // 誤差約0.145
+        assertEquals(0, MiniGameRules.pulseJudge(0.845f, d)) // 誤差約0.155
+    }
+
+    @Test
+    fun `pulse success score rises with difficulty`() {
+        assertEquals(14, MiniGameRules.pulseSuccessScore(MiniGameDifficulty.EASY))
+        assertEquals(16, MiniGameRules.pulseSuccessScore(MiniGameDifficulty.NORMAL))
+        assertEquals(18, MiniGameRules.pulseSuccessScore(MiniGameDifficulty.HARD))
+        assertEquals(21, MiniGameRules.pulseSuccessScore(MiniGameDifficulty.ONI))
+    }
+
+    @Test
+    fun `pulse result uses difficulty specific success threshold`() {
+        for (d in MiniGameDifficulty.entries) {
+            val threshold = MiniGameRules.pulseSuccessScore(d)
+            val atThreshold = MiniGameRules.resultFor(MiniGameKind.PULSE_TRAINING, threshold, d)
+            assertTrue(atThreshold.success)
+            assertEquals(d, atThreshold.difficulty)
+            val below = MiniGameRules.resultFor(MiniGameKind.PULSE_TRAINING, threshold - 1, d)
+            assertFalse(below.success)
+        }
+        // 2引数オーバーロードは中級として判定する(16点でクリア)。
+        assertTrue(MiniGameRules.resultFor(MiniGameKind.PULSE_TRAINING, 16).success)
+        assertFalse(MiniGameRules.resultFor(MiniGameKind.PULSE_TRAINING, 15).success)
     }
 
     @Test
