@@ -64,13 +64,22 @@ Codexが次を追加する予定。Claudeはenumを先に追加しない。
 - 画像内へキャラクター名やUI文字を描き込まない
 - `contentDescription` は画面側で設定する
 
+## 制作済み人型アセット
+
+- 男性人型14体、成人女性人型14体の計28体を制作済み
+- 正式IDと表示名: `docs/MONSTER_ROSTER.md`
+- 一覧プレビュー: `art/humanoid-roster-preview.png`
+- 生成原画と透過シート: `art/source/humanoid/`
+- 再切り出し処理: `art/tools/process_humanoid_sheets.py`
+- アプリ用個別画像: `app/src/main/res/drawable-nodpi/monster_<stable_form_id>.webp`
+
 ## ID規則
 
 - 公開後の `formId` はセーブデータキーとして扱い、名前変更しない。
 - 表示名変更と `formId` 変更を分離する。
 - 性別別フォームは別IDを持つ。
-- 正式IDはCodexが `docs/MONSTER_ROSTER.md` で承認済みにしてからClaudeが利用する。
-- 未確定期間は職業enumなどの論理分類を使い、仮の永続IDを作らない。
+- 人型28体の正式IDは `docs/MONSTER_ROSTER.md` で承認済み。Claudeはそのまま利用できる。
+- 動物系14体は未確定のため、職業enumなどの論理分類を使い、仮の永続IDを作らない。
 
 ## Claudeがしてよいこと
 
@@ -86,7 +95,7 @@ Codexが次を追加する予定。Claudeはenumを先に追加しない。
 - `MonsterArtwork` のIDマッピング変更
 - 独自の代替キャラクター画像追加
 - 既存の生成原画やプロンプトの削除
-- Codex未承認の人型キャラクターIDをセーブデータへ保存
+- `docs/MONSTER_ROSTER.md` に存在しないキャラクターIDをセーブデータへ保存
 
 ## タッチ統合予定
 
@@ -100,4 +109,3 @@ UI tap
   -> MonsterVisual renders animation
   -> DialogueEngine selects local text
 ```
-

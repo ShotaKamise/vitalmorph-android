@@ -34,7 +34,32 @@ Constraints: exact grid order, flat chroma-key background, no shadow, no text, n
 Avoid: photorealism, pixel art, cropped limbs, combined creatures, copyrighted character resemblance.
 ```
 
-`source/*-chroma.png` は生成原画、`source/*-transparent.png` は透過処理済みの系統別シート。アプリでは `app/src/main/res/drawable-nodpi/monster_*.webp` の43個の最適化済み画像を利用する。
+`source/*-chroma.png` は生成原画、`source/*-transparent.png` は透過処理済みの系統別シート。現行ゲームでは `app/src/main/res/drawable-nodpi/monster_*.webp` の43個の画像を利用する。
+
+## 人型28体
+
+![人型28体](humanoid-roster-preview.png)
+
+新しい43枠構成へ向け、7職業 x 男女 x 成熟体・最終形態の28体を制作した。正式名とIDは `docs/MONSTER_ROSTER.md` を参照する。
+
+生成には組み込み画像生成を使い、男性成熟体、男性最終形態、女性成熟体、女性最終形態の4シートに分けた。共通プロンプト仕様は次の通り。
+
+```text
+Use case: stylized-concept
+Asset type: Android monster-raising game humanoid character sheet
+Primary request: seven original humanoid monsters in a strict 7-column lineup:
+sword, dual blades, greatsword, spear, shotgun, mage, ninja.
+Style: premium Japanese fantasy RPG illustration, deep-navy outlines, cel shading,
+blue/gold shared life-core emblem, readable silhouette, front three-quarter full body.
+Progression: final forms preserve their role while gaining more elaborate armor,
+weapons, energy effects, authority, and a clearly stronger silhouette.
+Women: unmistakably adult, glamorous and attractive, fitted fantasy battle outfits,
+app-store-safe and non-explicit; never childlike.
+Constraints: flat chroma green background, separated characters, no text, no logo,
+no watermark, no cropped limbs, no existing-franchise resemblance.
+```
+
+原画は `source/humanoid/`、個別WebPへの再処理は `tools/process_humanoid_sheets.py` に保存している。アプリ用素材はすべて透過512 x 512 WebP。
 
 ## アニメーション仕様
 

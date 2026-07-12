@@ -20,6 +20,12 @@
 
 ![VitaMorph 全43形態](art/monster-roster-preview.png)
 
+## 次期構成の人型モンスター
+
+7職業 x 男女 x 成熟体・最終形態の新規28体を制作済み。現在は画像と正式IDまで完成しており、進化ルートへの組み込みは次の実装段階で行います。
+
+![VitaMorph 人型28体](art/humanoid-roster-preview.png)
+
 全形態は「紺色の生命コア」を共通モチーフにし、調和・筋力・俊足・蓄積・静養・過活動の6系統で色、体格、エネルギー表現を変えています。詳細なデザインルールと画像生成仕様は [`art/README.md`](art/README.md) に記載しています。
 
 アニメーションは呼吸、生命オーラ、踏み込み、反動、被弾の揺れ、勝利ジャンプを組み合わせています。バトルではトレーナーが4つの技と大会中で共通のアイテムを選び、CPUも回復・防御・大技を状況に応じて使います。すべてCompose上で動作するため、追加の動画ファイルやネットワーク通信は必要ありません。
@@ -90,8 +96,8 @@ GitHubリポジトリの `Settings > Secrets and variables > Actions` に次の4
 その後、タグをpushするとGitHub Releasesへ署名済みAPKが公開されます。
 
 ```bash
-git tag v0.3.0
-git push origin v0.3.0
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 署名鍵やパスワードをGitHubへ直接コミットしないでください。
