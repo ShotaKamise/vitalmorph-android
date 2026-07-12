@@ -34,25 +34,26 @@ MonsterSprite(
 )
 ```
 
-現在のモーション:
+## 実装済みモーション
+
+`MonsterMotion` は全10種。いずれも `scale` / `translationX` / `translationY` / `rotation` / `alpha` の
+変形アニメーション(専用画像は不要)として `MonsterArtwork.kt` に実装済み。
+
+既存4種:
 
 - `IDLE`
 - `ATTACK`
 - `VICTORY`
 - `HIT`
 
-## 追加予定モーション
+追加6種(2026-07-12にClaudeがコードで実装。旧Codex担当分の引き取りに伴う。詳細は `docs/COMPLETION_PLAN.md` T1):
 
-Codexが次を追加する予定。Claudeはenumを先に追加しない。
-
-- `TOUCH_HAPPY`
-- `TOUCH_SHY`
-- `TOUCH_ANNOYED`
-- `TALK`
-- `SAD`
-- `MINIGAME_SUCCESS`
-
-必要になった場合は `docs/HANDOFF_STATUS.md` の「Codexへの依頼」へ記載する。
+- `TOUCH_HAPPY` — 小さく2回跳ねる+わずかに拡大
+- `TOUCH_SHY` — 縮こまって左右に小さく揺れる
+- `TOUCH_ANNOYED` — 素早く首を振る左右回転+わずかに後退
+- `TALK` — 前傾しつつ上下に小刻みに揺れる(会話返答の表示中)
+- `SAD` — 下に沈み傾く(機嫌BAD帯のアイドル代替)
+- `MINIGAME_SUCCESS` — 大きく1回跳ねて回転(ミニゲーム成功時)
 
 ## 画像仕様
 

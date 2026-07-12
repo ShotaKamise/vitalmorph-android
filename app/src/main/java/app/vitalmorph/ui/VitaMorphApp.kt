@@ -159,6 +159,7 @@ fun VitaMorphApp(
                     onSetTrainerName = viewModel::setTrainerName,
                     onTouch = viewModel::onMonsterTouched,
                     onReactionShown = viewModel::clearTouchReaction,
+                    onCelebrationShown = viewModel::clearMiniGameCelebration,
                     onDialogueChoice = viewModel::onDialogueChoice,
                     onTalkAgain = viewModel::talkAgain,
                     onStartMiniGame = viewModel::startMiniGame,
@@ -284,6 +285,7 @@ private fun MainGameScreen(
     onSetTrainerName: (String) -> Unit,
     onTouch: (TouchArea) -> Unit,
     onReactionShown: () -> Unit,
+    onCelebrationShown: () -> Unit,
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
@@ -347,6 +349,7 @@ private fun MainGameScreen(
                     onSetTrainerName,
                     onTouch,
                     onReactionShown,
+                    onCelebrationShown,
                     onDialogueChoice,
                     onTalkAgain,
                     onStartMiniGame,
@@ -383,6 +386,7 @@ private fun HomeScreen(
     onSetTrainerName: (String) -> Unit,
     onTouch: (TouchArea) -> Unit,
     onReactionShown: () -> Unit,
+    onCelebrationShown: () -> Unit,
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
@@ -401,8 +405,11 @@ private fun HomeScreen(
                 mood = state.generation?.mood,
                 bond = state.generation?.bond,
                 touchReaction = state.touchReaction,
+                talking = state.dialogueReply != null,
+                miniGameCelebration = state.miniGameCelebration,
                 onTouch = onTouch,
                 onReactionShown = onReactionShown,
+                onCelebrationShown = onCelebrationShown,
             )
         }
         state.dialogue?.let { dialogue ->
@@ -490,8 +497,11 @@ private fun MonsterHero(
     mood: Int? = null,
     bond: Int? = null,
     touchReaction: TouchReactionType? = null,
+    talking: Boolean = false,
+    miniGameCelebration: Boolean = false,
     onTouch: ((TouchArea) -> Unit)? = null,
     onReactionShown: () -> Unit = {},
+    onCelebrationShown: () -> Unit = {},
 ) {
     // タッチ反応は少し表示してから通常モーションへ戻す。
     LaunchedEffect(touchReaction) {
@@ -500,11 +510,22 @@ private fun MonsterHero(
             onReactionShown()
         }
     }
-    // TOUCH_HAPPY等の専用モーションはCodex制作待ちのため、既存モーションから選択する
-    // (docs/MONSTER_ASSET_CONTRACT.md)。
-    val motion = when (touchReaction) {
-        TouchReactionType.HAPPY -> MonsterMotion.VICTORY
-        TouchReactionType.ANNOYED -> MonsterMotion.HIT
+    // ミニゲーム成功の祝福モーションも一定時間で通常へ戻す。
+    LaunchedEffect(miniGameCelebration) {
+        if (miniGameCelebration) {
+            delay(2_000)
+            onCelebrationShown()
+        }
+    }
+    // 専用モーション(2026-07-12 Claude実装 / docs/COMPLETION_PLAN.md T1)を優先度順に選ぶ。
+    // 1: タッチ反応 → 2: ミニゲーム成功 → 3: 会話中 → 4: 機嫌BAD帯 → 5: 通常アイドル。
+    val motion = when {
+        touchReaction == TouchReactionType.HAPPY -> MonsterMotion.TOUCH_HAPPY
+        touchReaction == TouchReactionType.SHY -> MonsterMotion.TOUCH_SHY
+        touchReaction == TouchReactionType.ANNOYED -> MonsterMotion.TOUCH_ANNOYED
+        miniGameCelebration -> MonsterMotion.MINIGAME_SUCCESS
+        talking -> MonsterMotion.TALK
+        mood != null && mood <= 19 -> MonsterMotion.SAD
         else -> MonsterMotion.IDLE
     }
     ElevatedCard(

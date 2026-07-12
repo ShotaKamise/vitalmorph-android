@@ -90,6 +90,7 @@ data class GameUiState(
     val dialogue: DialogueLine? = null,
     val dialogueReply: String? = null,
     val touchReaction: TouchReactionType? = null,
+    val miniGameCelebration: Boolean = false,
     val activeMiniGame: MiniGameKind? = null,
     val miniGameSeed: Int = 0,
     val foodEntriesToday: List<FoodEntry> = emptyList(),
@@ -224,6 +225,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     dialogue = dialogue,
                     dialogueReply = null,
                     touchReaction = null,
+                    miniGameCelebration = false,
                     foodEntriesToday = foodEntriesToday,
                     customFoods = customFoods,
                     favoriteFoodIds = favoriteFoodIds,
@@ -658,11 +660,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update {
             it.copy(
                 activeMiniGame = null,
+                miniGameCelebration = result.success,
                 interaction = reward.state,
                 generation = updated ?: it.generation,
                 message = message,
             )
         }
+    }
+
+    /** ミニゲーム成功時の祝福モーションを一定時間後に解除する。 */
+    fun clearMiniGameCelebration() {
+        mutableState.update { it.copy(miniGameCelebration = false) }
     }
 
     fun useBattleMove(moveId: String) {

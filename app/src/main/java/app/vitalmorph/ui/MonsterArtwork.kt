@@ -25,12 +25,22 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import app.vitalmorph.R
 import app.vitalmorph.domain.MonsterForm
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 
 enum class MonsterMotion {
     IDLE,
     ATTACK,
     VICTORY,
     HIT,
+    // タッチ・会話・ミニゲーム用モーション(2026-07-12 Claude実装 / docs/COMPLETION_PLAN.md T1)。
+    TOUCH_HAPPY,
+    TOUCH_SHY,
+    TOUCH_ANNOYED,
+    TALK,
+    SAD,
+    MINIGAME_SUCCESS,
 }
 
 object MonsterArtwork {
@@ -179,20 +189,35 @@ fun MonsterSprite(
     )
     val density = LocalDensity.current.density
     val baseBob = (phase - 0.5f) * 10f * density
+    // 2回跳ねる動き用に、actionの山を絶対値sinで2山へ変換する(TOUCH_HAPPY)。
+    val doubleHop = abs(sin(action.toDouble() * PI * 2.0)).toFloat()
+    // 首を振る速い左右揺れ用に、phaseから高周波の振動を作る(TOUCH_ANNOYED / TALK)。
+    val quickShake = sin(phase.toDouble() * PI * 4.0).toFloat()
     val scale = when (motion) {
         MonsterMotion.IDLE -> 0.985f + phase * 0.03f
         MonsterMotion.ATTACK -> 1f + action * 0.06f
         MonsterMotion.VICTORY -> 1f + action * 0.09f
         MonsterMotion.HIT -> 1f - action * 0.05f
+        MonsterMotion.TOUCH_HAPPY -> 1.01f + action * 0.04f
+        MonsterMotion.TOUCH_SHY -> 0.94f + phase * 0.01f
+        MonsterMotion.TOUCH_ANNOYED -> 1f
+        MonsterMotion.TALK -> 0.99f + phase * 0.02f
+        MonsterMotion.SAD -> 0.97f
+        MonsterMotion.MINIGAME_SUCCESS -> 1f + action * 0.10f
     }
     val translationX = when (motion) {
         MonsterMotion.ATTACK -> action * 34f * density
         MonsterMotion.HIT -> -action * 14f * density
+        MonsterMotion.TOUCH_ANNOYED -> -4f * density - action * 6f * density
         else -> 0f
     }
     val translationY = when (motion) {
         MonsterMotion.VICTORY -> baseBob - action * 22f * density
         MonsterMotion.HIT -> baseBob + action * 4f * density
+        MonsterMotion.TOUCH_HAPPY -> baseBob - doubleHop * 12f * density
+        MonsterMotion.TALK -> quickShake * 4f * density
+        MonsterMotion.SAD -> baseBob * 0.4f + 8f * density
+        MonsterMotion.MINIGAME_SUCCESS -> baseBob - action * 40f * density
         else -> baseBob
     }
     val rotation = when (motion) {
@@ -200,6 +225,12 @@ fun MonsterSprite(
         MonsterMotion.ATTACK -> action * 5f
         MonsterMotion.VICTORY -> (phase - 0.5f) * 5f
         MonsterMotion.HIT -> -action * 7f
+        MonsterMotion.TOUCH_HAPPY -> (phase - 0.5f) * 2f
+        MonsterMotion.TOUCH_SHY -> (phase - 0.5f) * 6f
+        MonsterMotion.TOUCH_ANNOYED -> quickShake * 10f
+        MonsterMotion.TALK -> 3.5f + (phase - 0.5f) * 2f
+        MonsterMotion.SAD -> -4f + (phase - 0.5f) * 1f
+        MonsterMotion.MINIGAME_SUCCESS -> action * 25f
     }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -225,7 +256,13 @@ fun MonsterSprite(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(4.dp)
-                .alpha(if (motion == MonsterMotion.HIT) 0.78f + phase * 0.22f else 1f)
+                .alpha(
+                    when (motion) {
+                        MonsterMotion.HIT -> 0.78f + phase * 0.22f
+                        MonsterMotion.SAD -> 0.88f
+                        else -> 1f
+                    },
+                )
                 .graphicsLayer {
                     this.translationX = if (facingRight) translationX else -translationX
                     this.translationY = translationY
