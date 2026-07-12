@@ -50,8 +50,11 @@ totalGenerations
 
 ## InteractionState
 
+v0.5で `interaction_state` テーブルとして確定(DBバージョン2)。
+
 ```text
-lastTouchedAt
+lastInteractionAt      旧名lastTouchedAt。会話でも更新するため改名
+consecutiveTouches     連続タッチの検出用に追加(v0.5)
 touchRewardCountToday
 conversationCountToday
 miniGameRewardCountToday
@@ -59,6 +62,7 @@ lastDailyResetDate
 ```
 
 端末時刻変更だけで報酬が無制限に復活しない設計にする。
+日付が過去へ戻った場合は1日カウントをリセットしない(`InteractionEngine.resetIfNewDay`)。
 
 ## DialogueContext
 

@@ -40,6 +40,18 @@ interface MonsterGenerationDao {
 }
 
 @Dao
+interface InteractionStateDao {
+    @Query("SELECT * FROM interaction_state WHERE id = ${InteractionStateEntity.SINGLETON_ID}")
+    suspend fun get(): InteractionStateEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: InteractionStateEntity)
+
+    @Query("DELETE FROM interaction_state")
+    suspend fun clear()
+}
+
+@Dao
 interface LegacyStatsDao {
     @Query("SELECT * FROM legacy_stats WHERE id = ${LegacyStatsEntity.SINGLETON_ID}")
     suspend fun get(): LegacyStatsEntity?

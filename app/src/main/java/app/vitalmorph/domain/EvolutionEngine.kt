@@ -115,27 +115,106 @@ object EvolutionEngine {
     ) = MonsterForm(firstId, firstName, MonsterStage.FINAL, family, firstRole, firstDescription, firstAccent) to
         MonsterForm(secondId, secondName, MonsterStage.FINAL, family, secondRole, secondDescription, secondAccent)
 
+    // 新43枠構成(docs/MONSTER_ROSTER.md)で最終形態として使う動物系6体。
+    // オス: アステリオン、バスティオンレックス、ゼファリオン
+    // メス: ミラフローラ、ルナヴェルデ、フェニクレスト
+    private val astelion = finalsByIntermediate.getValue(solfeon.id).first
+    private val miraflora = finalsByIntermediate.getValue(aquanel.id).first
+    private val bastionRex = finalsByIntermediate.getValue(grandguard.id).second
+    private val zephyrion = finalsByIntermediate.getValue(velox.id).first
+    private val lunaVerde = finalsByIntermediate.getValue(moonMoss.id).first
+    private val phoenixCrest = finalsByIntermediate.getValue(crackRun.id).second
+
+    /**
+     * 図鑑・検証用の全形態カタログ。承認済みIDのみを含み、公開済みIDは削除しない。
+     * 旧進化表の成熟体・最終形態も、動物系14体の最終選抜が確定するまで保持する。
+     */
+    val allForms: List<MonsterForm> =
+        listOf(baby, leafang, galvol, rapizel, motchigrow, mossleep, runpact) +
+            listOf(
+                solfeon, aquanel, grandguard, fangrage, velox, skyRush,
+                bulkDome, emberPot, moonMoss, driftMark, igniDash, crackRun,
+            ) +
+            finalsByIntermediate.values.flatMap { listOf(it.first, it.second) } +
+            HumanoidRoster.all
+
+    /**
+     * 新進化表(Phase 2)の評価。
+     * - 第1週: 共通幼生(モルフィ)
+     * - 第2週: 生活傾向による動物系成長体6種(性別差分画像は制作中のため共通画像+♂/♀表示)
+     * - 第3週: 第2週の傾向から人型7職業の成熟体(性別別ID)
+     * - 第4週: 第3週の生活・機嫌・絆で同職業の上位人型、または動物系最終形態
+     */
     fun evaluate(
         allDays: List<DailyHealthData>,
         goals: UserGoals,
         seasonStart: LocalDate,
         today: LocalDate,
+        sex: MonsterSex,
+        mood: Int = MonsterGeneration.DEFAULT_MOOD,
+        bond: Int = MonsterGeneration.DEFAULT_BOND,
     ): EvolutionResult {
         val seasonDay = (ChronoUnit.DAYS.between(seasonStart, today).toInt() + 1).coerceIn(1, 28)
         val sorted = allDays.filter { !it.date.isBefore(seasonStart) && !it.date.isAfter(today) }.sortedBy { it.date }
-        val familyMetrics = metrics(sorted.take(7), goals)
-        val family = chooseFamily(familyMetrics)
-        val intermediateMetrics = metrics(sorted.takeLast(7), goals)
-        val intermediate = chooseIntermediate(family, intermediateMetrics)
-        val finalMetrics = metrics(sorted.takeLast(7), goals)
-        val candidates = finalsByIntermediate.getValue(intermediate.id).let { listOf(it.first, it.second) }
-        val final = chooseFinal(intermediate, candidates, finalMetrics)
+        fun window(range: IntRange) = sorted.filter {
+            (ChronoUnit.DAYS.between(seasonStart, it.date).toInt() + 1) in range
+        }
+        val week1 = window(1..7)
+        val week2 = window(8..14).ifEmpty { week1 }
+        // 第4週の分岐は仕様どおり第3週の記録で判定する。第3週が無記録なら継続性0となり
+        // 動物系最終形態(罰ではない完成ルート)へ向かう。
+        val week3 = window(15..21)
+
+        val family = chooseFamily(metrics(week1, goals))
+        val job = chooseJob(family, metrics(week2, goals))
+        val mature = HumanoidRoster.mature(job, sex)
+        val finalDecisionMetrics = metrics(week3, goals)
+        val humanoidFinal = HumanoidRoster.finalForm(job, sex)
+        val animalFinal = animalFinalFor(job.family, sex)
+        val towardHumanoid = choosesHumanoidFinal(finalDecisionMetrics, mood, bond)
+        val final = if (towardHumanoid) humanoidFinal else animalFinal
+        val candidates = if (towardHumanoid) listOf(humanoidFinal, animalFinal) else listOf(animalFinal, humanoidFinal)
 
         return when (seasonDay) {
             in 1..7 -> EvolutionResult(seasonDay, baby, listOf(baby), listOf(), metrics(sorted, goals), 8)
             in 8..14 -> EvolutionResult(seasonDay, family, listOf(baby, family), listOf(), metrics(sorted, goals), 15)
-            in 15..21 -> EvolutionResult(seasonDay, intermediate, listOf(baby, family, intermediate), candidates, finalMetrics, 22)
-            else -> EvolutionResult(seasonDay, final, listOf(baby, family, intermediate, final), candidates, finalMetrics, null)
+            in 15..21 -> EvolutionResult(seasonDay, mature, listOf(baby, family, mature), candidates, finalDecisionMetrics, 22)
+            else -> EvolutionResult(seasonDay, final, listOf(baby, family, mature, final), candidates, metrics(sorted.takeLast(7), goals), null)
+        }
+    }
+
+    /**
+     * 第2週の傾向から人型7職業を決める(2026-07-12ユーザー承認のマッピング)。
+     * - 調和→剣士 / 筋力・蓄積→大剣使い / 過活動→ショットガン使い
+     * - 俊足は歩数型→二刀流剣士、運動時間型→槍使い
+     * - 静養は規則的→魔法使い、不規則→忍者
+     */
+    fun chooseJob(family: MonsterForm, m: EvolutionMetrics): HumanoidJob = when (family.family) {
+        MonsterFamily.BALANCE -> HumanoidJob.SWORDSMAN
+        MonsterFamily.SPEED -> if (m.stepGoalDays >= 4) HumanoidJob.DUAL_BLADE else HumanoidJob.LANCER
+        MonsterFamily.POWER, MonsterFamily.STORAGE -> HumanoidJob.GREATSWORD
+        MonsterFamily.OVERDRIVE -> HumanoidJob.GUNNER
+        MonsterFamily.REST -> if (m.consistencyScore >= 70) HumanoidJob.MAGE else HumanoidJob.NINJA
+    }
+
+    /**
+     * 第4週の分岐。記録の継続と、機嫌または絆が高ければ同職業の上位人型へ。
+     * 交流が少なくても動物系最終形態という完成ルートが残る(罰にしない)。
+     */
+    fun choosesHumanoidFinal(m: EvolutionMetrics, mood: Int, bond: Int): Boolean =
+        m.consistencyScore >= 50 && (mood >= 60 || bond >= 40)
+
+    /** 職業の系統と性別から動物系最終形態を選ぶ。 */
+    fun animalFinalFor(family: MonsterFamily, sex: MonsterSex): MonsterForm = when (sex) {
+        MonsterSex.MALE -> when (family) {
+            MonsterFamily.BALANCE, MonsterFamily.REST -> astelion
+            MonsterFamily.POWER, MonsterFamily.STORAGE -> bastionRex
+            MonsterFamily.SPEED, MonsterFamily.OVERDRIVE -> zephyrion
+        }
+        MonsterSex.FEMALE -> when (family) {
+            MonsterFamily.BALANCE, MonsterFamily.STORAGE -> miraflora
+            MonsterFamily.REST -> lunaVerde
+            MonsterFamily.SPEED, MonsterFamily.POWER, MonsterFamily.OVERDRIVE -> phoenixCrest
         }
     }
 
@@ -146,34 +225,6 @@ object EvolutionEngine {
         m.calorieRatio >= 1.10 || m.carbsRatio >= 1.15 || m.fatRatio >= 1.15 -> motchigrow
         m.activityScore < 65 -> mossleep
         else -> leafang
-    }
-
-    private fun chooseIntermediate(family: MonsterForm, m: EvolutionMetrics): MonsterForm = when (family.family) {
-        MonsterFamily.BALANCE -> if (m.consistencyScore >= 80) solfeon else aquanel
-        MonsterFamily.POWER -> if (m.strengthDays >= 3) grandguard else fangrage
-        MonsterFamily.SPEED -> if (m.stepGoalDays >= 5) velox else skyRush
-        MonsterFamily.STORAGE -> if (m.fatRatio >= m.carbsRatio) bulkDome else emberPot
-        MonsterFamily.REST -> if (m.consistencyScore >= 70) moonMoss else driftMark
-        MonsterFamily.OVERDRIVE -> if (m.calorieRatio >= 0.90) igniDash else crackRun
-    }
-
-    private fun chooseFinal(intermediate: MonsterForm, candidates: List<MonsterForm>, m: EvolutionMetrics): MonsterForm {
-        val chooseFirst = when (intermediate.id) {
-            solfeon.id -> m.nutritionScore >= 80 && m.consistencyScore >= 80
-            aquanel.id -> m.restDays >= 2 && m.nutritionScore >= 75
-            grandguard.id -> m.strengthDays >= 3 && m.consistencyScore >= 70
-            fangrage.id -> m.calorieRatio >= 0.90
-            velox.id -> m.stepGoalDays >= 6
-            skyRush.id -> m.highActivityDays >= 3
-            bulkDome.id -> m.activityScore < 70
-            emberPot.id -> m.carbsRatio >= m.fatRatio
-            moonMoss.id -> m.activityTrend <= 0.15
-            driftMark.id -> m.weekdayWeekendVariance >= 0.25
-            igniDash.id -> m.calorieRatio >= 0.90 && m.activityScore >= 110
-            crackRun.id -> m.calorieTrend <= 0.10 && m.calorieRatio < 0.90
-            else -> true
-        }
-        return if (chooseFirst) candidates.first() else candidates.last()
     }
 
     fun metrics(days: List<DailyHealthData>, goals: UserGoals): EvolutionMetrics {
