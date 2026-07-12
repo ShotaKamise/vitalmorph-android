@@ -43,6 +43,13 @@ object MoodEngine {
     /** 1日に機嫌・絆へ反映される会話回数の上限。 */
     const val DIALOGUE_REWARDS_PER_DAY = 5
 
+    /** ミニゲーム成功時の機嫌・絆ボーナス(1日の反映上限あり)。 */
+    const val MINIGAME_SUCCESS_MOOD = 4
+    const val MINIGAME_SUCCESS_BOND = 2
+
+    /** ミニゲームに挑戦した(成功に届かなかった)ときの機嫌ボーナス。挑戦を責めない。 */
+    const val MINIGAME_TRY_MOOD = 1
+
     /** 前日に栄養か活動の記録があった場合の機嫌ボーナス。 */
     const val RECORDED_DAY_MOOD = 3
 

@@ -15,13 +15,44 @@ object BattleEngine {
     private val healingItem = BattleItem("vita_tonic", "ヴィータトニック", "HPを40回復する")
     private val energyItem = BattleItem("core_cell", "コアセル", "エネルギーを2回復する")
     private val guardItem = BattleItem("pulse_guard", "パルスガード", "次に受ける攻撃を半減する")
+    private val cheerItem = BattleItem("trainer_cheer", "トレーナーの応援", "絆の力でHP25とエネルギー1を取り戻す(大会中1回)")
 
-    fun startTournament(monster: MonsterForm, metrics: EvolutionMetrics, seed: Int): TurnBattleState {
+    /** 絆がこの値以上なら大会中1回の応援が使える。 */
+    const val CHEER_BOND_THRESHOLD = 60
+
+    /**
+     * 大会を開始する。機嫌の補正はIMPLEMENTATION_PLAN.md Phase 3の基準に従い、
+     * 能力への影響は最大±5%相当に収める。機嫌が低くても参加は禁止しない。
+     * - 絶好調(80-100): 各試合開始時に小さなシールド
+     * - 好調(60-79): 素早さ+5%(最低+1)
+     * - 不調(20-39): 素早さ-5%(最低-1)
+     * - 元気がない(0-19): 開始エネルギーが3→2
+     */
+    fun startTournament(
+        monster: MonsterForm,
+        metrics: EvolutionMetrics,
+        seed: Int,
+        mood: Int = MonsterGeneration.DEFAULT_MOOD,
+        bond: Int = MonsterGeneration.DEFAULT_BOND,
+    ): TurnBattleState {
         val stageBonus = monster.stage.ordinal * 12
         val maxHp = 120 + metrics.consistencyScore / 2 + metrics.nutritionScore / 3 + stageBonus
         val attack = 18 + metrics.activityScore.coerceAtMost(130) / 8 + metrics.nutritionScore / 20 + stageBonus / 3
         val defense = 10 + metrics.nutritionScore / 12 + metrics.consistencyScore / 15 + stageBonus / 4
-        val speed = 10 + metrics.activityScore.coerceAtMost(130) / 10 + metrics.stepGoalDays * 2
+        val baseSpeed = 10 + metrics.activityScore.coerceAtMost(130) / 10 + metrics.stepGoalDays * 2
+        val moodBand = MoodEngine.moodBand(mood)
+        val speedDelta = (baseSpeed * 5 / 100).coerceAtLeast(1)
+        val speed = when (moodBand) {
+            MoodBand.GOOD -> baseSpeed + speedDelta
+            MoodBand.LOW -> (baseSpeed - speedDelta).coerceAtLeast(1)
+            else -> baseSpeed
+        }
+        val items = buildList {
+            add(BattleItemStock(healingItem, 2))
+            add(BattleItemStock(energyItem, 1))
+            add(BattleItemStock(guardItem, 1))
+            if (bond >= CHEER_BOND_THRESHOLD) add(BattleItemStock(cheerItem, 1))
+        }
         return createRound(
             roundIndex = 0,
             playerName = monster.name,
@@ -31,13 +62,11 @@ object BattleEngine {
             playerDefense = defense,
             playerSpeed = speed,
             moves = movesFor(monster.family),
-            items = listOf(
-                BattleItemStock(healingItem, 2),
-                BattleItemStock(energyItem, 1),
-                BattleItemStock(guardItem, 1),
-            ),
+            items = items,
             completedMatches = emptyList(),
             seed = seed,
+            startEnergy = if (moodBand == MoodBand.BAD) MAX_ENERGY - 1 else MAX_ENERGY,
+            startShield = moodBand == MoodBand.GREAT,
         )
     }
 
@@ -72,6 +101,8 @@ object BattleEngine {
             items = state.items,
             completedMatches = state.completedMatches,
             seed = state.seed,
+            startEnergy = state.playerStartEnergy,
+            startShield = state.playerStartShield,
         ).copy(log = listOf("${rounds[state.roundIndex + 1]}開始！ HPが少し回復した。"))
     }
 
@@ -122,9 +153,16 @@ object BattleEngine {
         items: List<BattleItemStock>,
         completedMatches: List<BattleMatch>,
         seed: Int,
+        startEnergy: Int = MAX_ENERGY,
+        startShield: Boolean = false,
     ): TurnBattleState {
         val difficulty = roundIndex * 6
         val opponentHp = playerMaxHp - 8 + difficulty * 2
+        val opening = buildList {
+            add("${rounds[roundIndex]}！ ${opponentNames[Math.floorMod(seed + roundIndex, opponentNames.size)]}が現れた。")
+            if (startShield) add("絶好調！ コンディションバリアを展開した。")
+            if (startEnergy < MAX_ENERGY) add("今日は少し元気がない…開始エネルギーが下がっている。")
+        }
         return TurnBattleState(
             roundIndex = roundIndex,
             roundLabel = rounds[roundIndex],
@@ -134,7 +172,7 @@ object BattleEngine {
             playerMaxHp = playerMaxHp,
             opponentHp = opponentHp,
             opponentMaxHp = opponentHp,
-            playerEnergy = MAX_ENERGY,
+            playerEnergy = startEnergy,
             opponentEnergy = MAX_ENERGY,
             playerAttack = playerAttack,
             playerDefense = playerDefense,
@@ -142,7 +180,7 @@ object BattleEngine {
             opponentAttack = playerAttack - 2 + difficulty,
             opponentDefense = playerDefense - 1 + difficulty / 2,
             opponentSpeed = playerSpeed - 2 + difficulty,
-            playerGuarding = false,
+            playerGuarding = startShield,
             opponentGuarding = false,
             opponentPotions = 1,
             moves = moves,
@@ -150,8 +188,10 @@ object BattleEngine {
             turn = 1,
             seed = seed,
             outcome = BattleOutcome.IN_PROGRESS,
-            log = listOf("${rounds[roundIndex]}！ ${opponentNames[Math.floorMod(seed + roundIndex, opponentNames.size)]}が現れた。"),
+            log = opening,
             completedMatches = completedMatches,
+            playerStartEnergy = startEnergy,
+            playerStartShield = startShield,
         )
     }
 
@@ -199,6 +239,13 @@ object BattleEngine {
                         guardItem.id -> {
                             playerGuarding = true
                             messages += "トレーナーは${playerAction.item.name}を使用。防御膜を展開！"
+                        }
+                        cheerItem.id -> {
+                            val healed = min(25, state.playerMaxHp - playerHp)
+                            playerHp += healed
+                            val restored = min(1, MAX_ENERGY - playerEnergy)
+                            playerEnergy += restored
+                            messages += "トレーナーの応援が届いた！ HPが${healed}回復、エネルギー+$restored！"
                         }
                     }
                 }

@@ -137,4 +137,16 @@ object InteractionEngine {
         )
     }
 
+    /**
+     * ミニゲームを1回終えたときの報酬判定。反映は1日 [MiniGameRules.REWARDS_PER_DAY] 回まで。
+     * プレイ自体は何回でもできる(報酬が付かないだけ)。
+     */
+    fun onMiniGame(state: InteractionState, now: Long, today: LocalDate): ConversationRewardResult {
+        val fresh = resetIfNewDay(state, today).copy(lastInteractionAt = now, consecutiveTouches = 0)
+        val rewarded = fresh.miniGameRewardCountToday < MiniGameRules.REWARDS_PER_DAY
+        return ConversationRewardResult(
+            rewarded = rewarded,
+            state = if (rewarded) fresh.copy(miniGameRewardCountToday = fresh.miniGameRewardCountToday + 1) else fresh,
+        )
+    }
 }

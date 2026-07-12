@@ -175,4 +175,8 @@ data class TurnBattleState(
     val outcome: BattleOutcome,
     val log: List<String>,
     val completedMatches: List<BattleMatch>,
+    /** 機嫌による各試合の開始エネルギー(通常3、不調時2)。 */
+    val playerStartEnergy: Int = 3,
+    /** 絶好調時に各試合の開始時へ張られる小さなシールド。 */
+    val playerStartShield: Boolean = false,
 )
