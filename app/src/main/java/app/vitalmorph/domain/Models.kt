@@ -111,3 +111,68 @@ data class TournamentResult(
     val tournamentPoints: Int,
     val matches: List<BattleMatch>,
 )
+
+enum class BattleMoveKind {
+    ATTACK,
+    GUARD,
+    RECOVERY,
+}
+
+data class BattleMove(
+    val id: String,
+    val name: String,
+    val description: String,
+    val kind: BattleMoveKind,
+    val power: Int,
+    val energyCost: Int,
+    val priority: Int = 0,
+    val heal: Int = 0,
+    val recoil: Int = 0,
+)
+
+data class BattleItem(
+    val id: String,
+    val name: String,
+    val description: String,
+)
+
+data class BattleItemStock(
+    val item: BattleItem,
+    val remaining: Int,
+)
+
+enum class BattleOutcome {
+    IN_PROGRESS,
+    ROUND_WON,
+    TOURNAMENT_WON,
+    PLAYER_LOST,
+}
+
+data class TurnBattleState(
+    val roundIndex: Int,
+    val roundLabel: String,
+    val playerName: String,
+    val opponentName: String,
+    val playerHp: Int,
+    val playerMaxHp: Int,
+    val opponentHp: Int,
+    val opponentMaxHp: Int,
+    val playerEnergy: Int,
+    val opponentEnergy: Int,
+    val playerAttack: Int,
+    val playerDefense: Int,
+    val playerSpeed: Int,
+    val opponentAttack: Int,
+    val opponentDefense: Int,
+    val opponentSpeed: Int,
+    val playerGuarding: Boolean,
+    val opponentGuarding: Boolean,
+    val opponentPotions: Int,
+    val moves: List<BattleMove>,
+    val items: List<BattleItemStock>,
+    val turn: Int,
+    val seed: Int,
+    val outcome: BattleOutcome,
+    val log: List<String>,
+    val completedMatches: List<BattleMatch>,
+)

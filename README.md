@@ -11,7 +11,7 @@
 - 幼生を含む全43形態のオリジナルキャラクターイラスト
 - 待機・攻撃・被弾・勝利のリアルタイムアニメーション
 - 第3週の過ごし方によって最終進化が2種類へ分岐
-- 8体参加のCPUオートトーナメント
+- 技とアイテムを選んで戦うCPUターン制トーナメント
 - 13シーズン（364日）と1,100XPでマスターになる年間ランク
 - 実データなしで全サイクルを確認できるデモモード
 - ゲーム状態を端末内へ保存
@@ -22,9 +22,18 @@
 
 全形態は「紺色の生命コア」を共通モチーフにし、調和・筋力・俊足・蓄積・静養・過活動の6系統で色、体格、エネルギー表現を変えています。詳細なデザインルールと画像生成仕様は [`art/README.md`](art/README.md) に記載しています。
 
-アニメーションは静止画を変形するだけの単純な上下移動ではなく、呼吸、生命オーラ、踏み込み、反動、被弾の揺れ、勝利ジャンプを組み合わせています。すべてCompose上で動作するため、追加の動画ファイルやネットワーク通信は必要ありません。
+アニメーションは呼吸、生命オーラ、踏み込み、反動、被弾の揺れ、勝利ジャンプを組み合わせています。バトルではトレーナーが4つの技と大会中で共通のアイテムを選び、CPUも回復・防御・大技を状況に応じて使います。すべてCompose上で動作するため、追加の動画ファイルやネットワーク通信は必要ありません。
 
 健康データは端末内で進化判定に使い、外部サーバーへ送信しません。本アプリは医療診断・治療を目的とするものではありません。
+
+## 開発引き継ぎ
+
+- Claude Code向け指示: [`CLAUDE.md`](CLAUDE.md)
+- 現在の実装状況: [`docs/HANDOFF_STATUS.md`](docs/HANDOFF_STATUS.md)
+- 今後の実装計画: [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
+- 予定データモデル: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
+- 新43枠構成: [`docs/MONSTER_ROSTER.md`](docs/MONSTER_ROSTER.md)
+- 画像・アニメーション連携契約: [`docs/MONSTER_ASSET_CONTRACT.md`](docs/MONSTER_ASSET_CONTRACT.md)
 
 ## データ連携
 
@@ -81,8 +90,8 @@ GitHubリポジトリの `Settings > Secrets and variables > Actions` に次の4
 その後、タグをpushするとGitHub Releasesへ署名済みAPKが公開されます。
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 署名鍵やパスワードをGitHubへ直接コミットしないでください。

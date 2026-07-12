@@ -15,6 +15,7 @@ import app.vitalmorph.domain.TournamentResult
 import app.vitalmorph.domain.TrainerProgress
 import app.vitalmorph.domain.TrainerRank
 import app.vitalmorph.domain.TrainerRankEngine
+import app.vitalmorph.domain.TurnBattleState
 import app.vitalmorph.domain.UserGoals
 import app.vitalmorph.domain.WorkoutTag
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +47,7 @@ data class GameUiState(
     val trainerProgress: TrainerProgress = TrainerProgress(),
     val trainerRank: TrainerRank = TrainerRankEngine.rankFor(TrainerProgress()),
     val tournament: TournamentResult? = null,
+    val battle: TurnBattleState? = null,
     val tournamentPoints: Int = 0,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
@@ -121,16 +123,44 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         refresh()
     }
 
-    fun runTournament() {
+    fun startTournament() {
         val current = mutableState.value
         val evolution = current.evolution ?: return
-        val result = BattleEngine.runTournament(
+        val battle = BattleEngine.startTournament(
             evolution.form,
             evolution.metrics,
             seed = current.seasonStart.toEpochDay().toInt() + evolution.seasonDay + current.tournamentPoints,
         )
-        store.saveTournamentPoints(result.tournamentPoints)
-        mutableState.update { it.copy(tournament = result, tournamentPoints = result.tournamentPoints) }
+        mutableState.update { it.copy(battle = battle, tournament = null) }
+    }
+
+    fun useBattleMove(moveId: String) {
+        updateBattle { BattleEngine.useMove(it, moveId) }
+    }
+
+    fun useBattleItem(itemId: String) {
+        updateBattle { BattleEngine.useItem(it, itemId) }
+    }
+
+    fun advanceBattleRound() {
+        val current = mutableState.value.battle ?: return
+        mutableState.update { it.copy(battle = BattleEngine.nextRound(current)) }
+    }
+
+    private fun updateBattle(action: (TurnBattleState) -> TurnBattleState) {
+        val current = mutableState.value
+        val battle = current.battle ?: return
+        val updated = action(battle)
+        val result = BattleEngine.resultFor(updated)
+        val bestPoints = result?.let { maxOf(current.tournamentPoints, it.tournamentPoints) }
+        if (bestPoints != null) store.saveTournamentPoints(bestPoints)
+        mutableState.update {
+            it.copy(
+                battle = updated,
+                tournament = result ?: it.tournament,
+                tournamentPoints = bestPoints ?: it.tournamentPoints,
+            )
+        }
     }
 
     fun advanceDemoWeek() {
@@ -149,7 +179,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val seasonMetrics = EvolutionEngine.metrics(current.days, current.goals)
         val points = TrainerRankEngine.seasonPoints(current.days, seasonMetrics, current.tournamentPoints)
         store.completeSeason(points)
-        mutableState.update { it.copy(tournament = null, message = "シーズン完了: トレーナー経験値 +$points") }
+        mutableState.update { it.copy(tournament = null, battle = null, message = "シーズン完了: トレーナー経験値 +$points") }
         refresh()
     }
 

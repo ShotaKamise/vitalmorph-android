@@ -41,7 +41,7 @@ Avoid: photorealism, pixel art, cropped limbs, combined creatures, copyrighted c
 | 動き | 内容 | 使用場所 |
 |---|---|---|
 | IDLE | 呼吸、微小な浮遊、生命オーラの脈動 | ホーム、進化画面 |
-| ATTACK | 溜め、前方への踏み込み、反動 | 大会バトル |
+| ATTACK | 溜め、前方への踏み込み、反動 | ターン制大会バトル |
 | HIT | 後退、傾き、明滅 | 大会バトル |
 | VICTORY | ジャンプ、拡大、オーラ強調 | 勝利結果、優勝画面 |
 

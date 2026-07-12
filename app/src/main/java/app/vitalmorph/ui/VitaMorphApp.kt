@@ -57,10 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.vitalmorph.domain.DailyHealthData
+import app.vitalmorph.domain.BattleOutcome
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.MonsterForm
 import app.vitalmorph.domain.MonsterStage
 import app.vitalmorph.domain.TournamentResult
+import app.vitalmorph.domain.TurnBattleState
 import app.vitalmorph.domain.TrainerRank
 import app.vitalmorph.domain.UserGoals
 import app.vitalmorph.domain.WorkoutTag
@@ -116,7 +118,10 @@ fun VitaMorphApp(
                     onRequestHealthPermissions = onRequestHealthPermissions,
                     onRefresh = viewModel::refresh,
                     onWorkoutTag = viewModel::setWorkoutTag,
-                    onTournament = viewModel::runTournament,
+                    onStartTournament = viewModel::startTournament,
+                    onBattleMove = viewModel::useBattleMove,
+                    onBattleItem = viewModel::useBattleItem,
+                    onNextRound = viewModel::advanceBattleRound,
                     onAdvanceDemo = viewModel::advanceDemoWeek,
                     onCompleteSeason = viewModel::completeSeason,
                     onReset = viewModel::resetAll,
@@ -220,7 +225,10 @@ private fun MainGameScreen(
     onRequestHealthPermissions: () -> Unit,
     onRefresh: () -> Unit,
     onWorkoutTag: (WorkoutTag) -> Unit,
-    onTournament: () -> Unit,
+    onStartTournament: () -> Unit,
+    onBattleMove: (String) -> Unit,
+    onBattleItem: (String) -> Unit,
+    onNextRound: () -> Unit,
     onAdvanceDemo: () -> Unit,
     onCompleteSeason: () -> Unit,
     onReset: () -> Unit,
@@ -266,7 +274,7 @@ private fun MainGameScreen(
             when (state.selectedTab) {
                 AppTab.HOME -> HomeScreen(state, onRequestHealthPermissions, onRefresh, onWorkoutTag)
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
-                AppTab.ARENA -> ArenaScreen(state, onTournament)
+                AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
                 AppTab.TRAINER -> TrainerScreen(state)
                 AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset)
             }
@@ -442,104 +450,173 @@ private fun ScoreBar(label: String, score: Int) {
 }
 
 @Composable
-private fun ArenaScreen(state: GameUiState, onTournament: () -> Unit) {
+private fun ArenaScreen(
+    state: GameUiState,
+    onStartTournament: () -> Unit,
+    onBattleMove: (String) -> Unit,
+    onBattleItem: (String) -> Unit,
+    onNextRound: () -> Unit,
+) {
     val currentForm = state.evolution?.form
-    val featuredOpponent = state.tournament?.matches?.lastOrNull()?.opponent ?: "アーク・チャレンジャー"
+    val battle = state.battle
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
-            SectionTitle("CPUオートトーナメント")
-            Text("8体参加。準々決勝から決勝まで自動で戦い、結果をダイジェスト表示します。")
+            SectionTitle("トレーナーバトル大会")
+            Text("技とアイテムを選び、CPUトレーナーとの3試合を勝ち抜こう。アイテムは大会中で共通です。")
         }
-        if (currentForm != null) {
-            item { BattleStage(currentForm, featuredOpponent, state.tournament != null) }
-        }
-        item {
-            Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onTournament) {
-                Text(if (state.tournament == null) "大会に参加する" else "再戦する")
+        if (currentForm != null && battle == null) {
+            item {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(currentForm.accent).copy(alpha = 0.10f))) {
+                    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        MonsterVisual(currentForm, Modifier.size(190.dp), motion = MonsterMotion.VICTORY)
+                        Text(currentForm.name, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        Text("4つの技と3種類のアイテムで戦います", color = Gold)
+                    }
+                }
+            }
+            item {
+                Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onStartTournament) {
+                    Text("大会を開始する")
+                }
             }
         }
-        state.tournament?.let { result ->
-            item { TournamentSummary(result, currentForm) }
-            items(result.matches) { match ->
-                ElevatedCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(match.round, fontWeight = FontWeight.Bold)
-                            Text(if (match.won) "WIN" else "LOSE", color = if (match.won) Mint else Color(0xFFFF7777))
-                        }
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            currentForm?.let {
-                                MonsterVisual(
-                                    form = it,
-                                    modifier = Modifier.size(72.dp),
-                                    motion = if (match.won) MonsterMotion.VICTORY else MonsterMotion.HIT,
-                                    showAura = false,
-                                )
-                            }
-                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("VS ${match.opponent}", textAlign = TextAlign.Center)
-                                Text("${match.playerScore} - ${match.opponentScore}", fontSize = 24.sp, fontWeight = FontWeight.Black)
-                            }
-                            MonsterSprite(
-                                drawableRes = MonsterArtwork.resourceForOpponent(match.opponent),
-                                contentDescription = match.opponent,
-                                accent = Color(0xFFB89CFF),
-                                modifier = Modifier.size(72.dp),
-                                motion = if (match.won) MonsterMotion.HIT else MonsterMotion.VICTORY,
-                                facingRight = false,
-                                showAura = false,
-                            )
+        if (currentForm != null && battle != null) {
+            item { TurnBattleStage(currentForm, battle) }
+            when (battle.outcome) {
+                BattleOutcome.IN_PROGRESS -> item { BattleCommandPanel(battle, onBattleMove, onBattleItem) }
+                BattleOutcome.ROUND_WON -> item {
+                    Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onNextRound) {
+                        Text("HPを35%回復して次の試合へ")
+                    }
+                }
+                BattleOutcome.TOURNAMENT_WON, BattleOutcome.PLAYER_LOST -> {
+                    state.tournament?.let { result -> item { TournamentSummary(result, currentForm) } }
+                    item {
+                        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onStartTournament) {
+                            Text("最初から再挑戦する")
                         }
                     }
                 }
             }
+            item { BattleLog(battle) }
         }
     }
 }
 
 @Composable
-private fun BattleStage(form: MonsterForm, opponent: String, completed: Boolean) {
-    ElevatedCard(
-        colors = CardDefaults.elevatedCardColors(containerColor = Color(form.accent).copy(alpha = 0.10f)),
-    ) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(if (completed) "BATTLE REPLAY" else "NEXT BATTLE", color = Gold, fontWeight = FontWeight.Black)
+private fun TurnBattleStage(form: MonsterForm, battle: TurnBattleState) {
+    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(form.accent).copy(alpha = 0.10f))) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(battle.roundLabel, color = Gold, fontWeight = FontWeight.Black)
+                Text("TURN ${battle.turn}", fontWeight = FontWeight.Bold)
+            }
+            BattleHealthBar(battle.opponentName, battle.opponentHp, battle.opponentMaxHp, Color(0xFFB89CFF))
             Row(
-                Modifier.fillMaxWidth().height(176.dp),
+                Modifier.fillMaxWidth().height(160.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    MonsterVisual(
-                        form = form,
-                        modifier = Modifier.size(140.dp),
-                        motion = MonsterMotion.ATTACK,
-                    )
-                    Text("YOU", color = Color(form.accent), fontWeight = FontWeight.Bold)
-                }
+                MonsterVisual(
+                    form = form,
+                    modifier = Modifier.weight(1f).height(150.dp),
+                    motion = when (battle.outcome) {
+                        BattleOutcome.TOURNAMENT_WON, BattleOutcome.ROUND_WON -> MonsterMotion.VICTORY
+                        BattleOutcome.PLAYER_LOST -> MonsterMotion.HIT
+                        BattleOutcome.IN_PROGRESS -> MonsterMotion.ATTACK
+                    },
+                )
                 Text("VS", color = Gold, fontWeight = FontWeight.Black, fontSize = 20.sp)
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    MonsterSprite(
-                        drawableRes = MonsterArtwork.resourceForOpponent(opponent),
-                        contentDescription = opponent,
-                        accent = Color(0xFFB89CFF),
-                        modifier = Modifier.size(140.dp),
-                        motion = MonsterMotion.HIT,
-                        facingRight = false,
-                    )
-                    Text("CPU", color = Color(0xFFB89CFF), fontWeight = FontWeight.Bold)
+                MonsterSprite(
+                    drawableRes = MonsterArtwork.resourceForOpponent(battle.opponentName),
+                    contentDescription = battle.opponentName,
+                    accent = Color(0xFFB89CFF),
+                    modifier = Modifier.weight(1f).height(150.dp),
+                    motion = when (battle.outcome) {
+                        BattleOutcome.PLAYER_LOST -> MonsterMotion.VICTORY
+                        else -> MonsterMotion.HIT
+                    },
+                    facingRight = false,
+                )
+            }
+            BattleHealthBar(battle.playerName, battle.playerHp, battle.playerMaxHp, Color(form.accent))
+            Text("コアエネルギー ${"●".repeat(battle.playerEnergy)}${"○".repeat(3 - battle.playerEnergy)}", color = Gold)
+        }
+    }
+}
+
+@Composable
+private fun BattleHealthBar(name: String, hp: Int, maxHp: Int, accent: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(name, fontWeight = FontWeight.Bold)
+            Text("HP $hp / $maxHp", style = MaterialTheme.typography.labelMedium)
+        }
+        LinearProgressIndicator(
+            progress = { hp.toFloat() / maxHp.coerceAtLeast(1) },
+            modifier = Modifier.fillMaxWidth().height(8.dp),
+            color = accent,
+        )
+    }
+}
+
+@Composable
+private fun BattleCommandPanel(
+    battle: TurnBattleState,
+    onMove: (String) -> Unit,
+    onItem: (String) -> Unit,
+) {
+    ElevatedCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("技を選ぶ", fontSize = 20.sp, fontWeight = FontWeight.Black)
+            battle.moves.forEach { move ->
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = battle.playerEnergy >= move.energyCost,
+                    onClick = { onMove(move.id) },
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(move.name, fontWeight = FontWeight.Bold)
+                            Text(if (move.energyCost == 0) "消費なし" else "●${move.energyCost}")
+                        }
+                        Text(
+                            if (move.power > 0) "${move.description}・威力 ${move.power}" else move.description,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
+            }
+            HorizontalDivider()
+            Text("アイテムを使う", fontWeight = FontWeight.Bold)
+            battle.items.forEach { stock ->
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onItem(stock.item.id) },
+                    enabled = stock.remaining > 0,
+                ) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text("${stock.item.name} ×${stock.remaining}", fontWeight = FontWeight.Bold)
+                        Text(stock.item.description, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            Text("アイテムを使ってもCPUのターンは進みます。", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun BattleLog(battle: TurnBattleState) {
+    ElevatedCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("バトルログ", fontWeight = FontWeight.Black)
+            battle.log.takeLast(10).forEach { entry ->
+                Text(entry, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
