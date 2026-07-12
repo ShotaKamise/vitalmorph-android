@@ -40,6 +40,54 @@ interface MonsterGenerationDao {
 }
 
 @Dao
+interface FoodEntryDao {
+    @Query("SELECT * FROM food_entry WHERE date BETWEEN :startDate AND :endDate ORDER BY date ASC, createdAt ASC")
+    suspend fun between(startDate: String, endDate: String): List<FoodEntryEntity>
+
+    @Query("SELECT * FROM food_entry WHERE date = :date ORDER BY createdAt ASC")
+    suspend fun byDate(date: String): List<FoodEntryEntity>
+
+    @Query("SELECT * FROM food_entry ORDER BY createdAt DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<FoodEntryEntity>
+
+    @Insert
+    suspend fun insert(entity: FoodEntryEntity): Long
+
+    @Query("DELETE FROM food_entry WHERE entryId = :entryId")
+    suspend fun delete(entryId: Long)
+
+    @Query("DELETE FROM food_entry")
+    suspend fun clear()
+}
+
+@Dao
+interface CustomFoodDao {
+    @Query("SELECT * FROM custom_food ORDER BY createdAt DESC")
+    suspend fun all(): List<CustomFoodEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: CustomFoodEntity)
+
+    @Query("DELETE FROM custom_food")
+    suspend fun clear()
+}
+
+@Dao
+interface FoodFavoriteDao {
+    @Query("SELECT foodId FROM food_favorite")
+    suspend fun all(): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun add(entity: FoodFavoriteEntity)
+
+    @Query("DELETE FROM food_favorite WHERE foodId = :foodId")
+    suspend fun remove(foodId: String)
+
+    @Query("DELETE FROM food_favorite")
+    suspend fun clear()
+}
+
+@Dao
 interface InteractionStateDao {
     @Query("SELECT * FROM interaction_state WHERE id = ${InteractionStateEntity.SINGLETON_ID}")
     suspend fun get(): InteractionStateEntity?

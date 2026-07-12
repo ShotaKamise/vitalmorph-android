@@ -5,6 +5,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.vitalmorph.data.DemoDataFactory
+import app.vitalmorph.data.FoodRepository
 import app.vitalmorph.data.GameStore
 import app.vitalmorph.data.HealthConnectRepository
 import app.vitalmorph.data.ProfileRepository
@@ -17,14 +18,19 @@ import app.vitalmorph.domain.DialogueEngine
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.FoodCatalogItem
+import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.InteractionEngine
 import app.vitalmorph.domain.InteractionState
 import app.vitalmorph.domain.LegacyAwardEngine
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
+import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MoodEngine
+import app.vitalmorph.domain.NutritionResolver
+import app.vitalmorph.domain.NutritionSource
 import app.vitalmorph.domain.SexAssigner
 import app.vitalmorph.domain.TimeOfDay
 import app.vitalmorph.domain.TouchArea
@@ -49,6 +55,7 @@ import java.time.ZoneId
 
 enum class AppTab(val label: String, val symbol: String) {
     HOME("育成", "●"),
+    MEALS("食事", "🍙"),
     EVOLUTION("進化", "◇"),
     ARENA("大会", "⚔"),
     TRAINER("トレーナー", "★"),
@@ -81,6 +88,11 @@ data class GameUiState(
     val touchReaction: TouchReactionType? = null,
     val activeMiniGame: MiniGameKind? = null,
     val miniGameSeed: Int = 0,
+    val foodEntriesToday: List<FoodEntry> = emptyList(),
+    val customFoods: List<FoodCatalogItem> = emptyList(),
+    val favoriteFoodIds: Set<String> = emptySet(),
+    val recentFoods: List<FoodEntry> = emptyList(),
+    val nutritionSource: NutritionSource = NutritionSource.VITALMORPH_FIRST,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -89,6 +101,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val store = GameStore(application)
     private val health = HealthConnectRepository(application)
     private val profiles = ProfileRepository(VitaMorphDatabase.getInstance(application))
+    private val foods = FoodRepository(VitaMorphDatabase.getInstance(application))
     private val mutableState = MutableStateFlow(GameUiState())
     val state: StateFlow<GameUiState> = mutableState.asStateFlow()
 
@@ -103,16 +116,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val today = if (stored.demoMode) LocalDate.now().plusDays(stored.demoDayOffset.toLong()) else LocalDate.now()
             val available = health.sdkStatus == HealthConnectClient.SDK_AVAILABLE
             val granted = available && runCatching { health.hasAllPermissions() }.getOrDefault(false)
-            val rawDays = when {
+            val seasonEnd = minOf(today, stored.seasonStart.plusDays(27))
+            val baseDays = when {
                 !stored.onboardingComplete -> emptyList()
                 stored.demoMode -> DemoDataFactory.create(stored.seasonStart, today, stored.goals)
                 granted -> runCatching {
-                    health.readDays(stored.seasonStart, minOf(today, stored.seasonStart.plusDays(27)), store.workoutTags())
+                    health.readDays(stored.seasonStart, seasonEnd, store.workoutTags())
                 }.getOrElse { error ->
                     mutableState.update { it.copy(message = "同期できませんでした: ${error.message ?: "不明なエラー"}") }
                     emptyList()
                 }
                 else -> emptyList()
+            }
+            // アプリ内の食事記録を優先元ルール(あすけん優先/VitaMorph優先)で重ねる。
+            // デモモードはデモデータをそのまま使う。
+            val rawDays = if (stored.onboardingComplete && !stored.demoMode) {
+                val entriesByDate = runCatching {
+                    foods.entriesBetween(stored.seasonStart, seasonEnd).groupBy { it.date }
+                }.getOrDefault(emptyMap())
+                NutritionResolver.mergeDays(baseDays, entriesByDate, stored.nutritionSource, stored.seasonStart, seasonEnd)
+            } else {
+                baseDays
             }
             // 性別・機嫌・絆が進化ルートへ影響するため、世代を先に確定してから進化を評価する。
             var generation = if (stored.onboardingComplete) {
@@ -156,6 +180,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val pastGenerations = runCatching {
                 profiles.allGenerations().filter { it.seasonEnd != null }.sortedByDescending { it.generationNumber }
             }.getOrDefault(emptyList())
+            val foodEntriesToday = runCatching { foods.entriesOn(today) }.getOrDefault(emptyList())
+            val customFoods = runCatching { foods.customFoods() }.getOrDefault(emptyList())
+            val favoriteFoodIds = runCatching { foods.favoriteIds() }.getOrDefault(emptySet())
+            val recentFoods = runCatching { foods.recentFoods() }.getOrDefault(emptyList())
             val dialogue = dialogueFor(trainerName, evolution, generation, rawDays, stored.goals, today)
             mutableState.update {
                 it.copy(
@@ -180,6 +208,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     dialogue = dialogue,
                     dialogueReply = null,
                     touchReaction = null,
+                    foodEntriesToday = foodEntriesToday,
+                    customFoods = customFoods,
+                    favoriteFoodIds = favoriteFoodIds,
+                    recentFoods = recentFoods,
+                    nutritionSource = stored.nutritionSource,
                 )
             }
         }
@@ -289,6 +322,118 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 dialogueReply = null,
             )
         }
+    }
+
+    /** カタログ(同梱または自作)から食事を記録する。amountは選んだ数量。 */
+    fun addCatalogFood(slot: MealSlot, item: FoodCatalogItem, amount: Double) {
+        val scaled = item.scaledTo(amount)
+        addFood(
+            slot = slot,
+            name = scaled.name,
+            amount = amount,
+            unit = scaled.amountUnit,
+            calories = scaled.calories,
+            protein = scaled.proteinGrams,
+            fat = scaled.fatGrams,
+            carbs = scaled.carbsGrams,
+            saveAsCustom = false,
+        )
+    }
+
+    /** 手入力で食事を記録する。saveAsCustomなら自作食品としても保存する。 */
+    fun addFood(
+        slot: MealSlot,
+        name: String,
+        amount: Double,
+        unit: String,
+        calories: Double,
+        protein: Double,
+        fat: Double,
+        carbs: Double,
+        saveAsCustom: Boolean,
+    ) {
+        if (name.isBlank()) {
+            mutableState.update { it.copy(message = "食品名を入力してください") }
+            return
+        }
+        val current = mutableState.value
+        viewModelScope.launch {
+            runCatching {
+                val entry = foods.addEntry(
+                    date = current.today,
+                    mealSlot = slot,
+                    foodName = name,
+                    amount = amount,
+                    amountUnit = unit,
+                    calories = calories,
+                    proteinGrams = protein,
+                    fatGrams = fat,
+                    carbsGrams = carbs,
+                )
+                if (saveAsCustom) {
+                    foods.saveCustomFood(name, amount, unit, calories, protein, fat, carbs)
+                }
+                // Health Connectへも書き込む(権限なし・非対応・デモ中は記録のみ)。
+                if (!current.demoMode && current.permissionsGranted) {
+                    health.writeNutrition(entry)
+                }
+            }.onFailure {
+                mutableState.update { state -> state.copy(message = "記録を保存できませんでした") }
+            }
+            refresh()
+        }
+    }
+
+    fun deleteFood(entry: FoodEntry) {
+        val current = mutableState.value
+        viewModelScope.launch {
+            runCatching {
+                foods.deleteEntry(entry.entryId)
+                if (!current.demoMode && current.permissionsGranted) {
+                    health.deleteNutrition(entry.clientRecordId)
+                }
+            }
+            refresh()
+        }
+    }
+
+    /** 昨日の記録を今日へコピーする。 */
+    fun copyYesterdayMeals() {
+        val current = mutableState.value
+        viewModelScope.launch {
+            val copied = runCatching { foods.copyDay(current.today.minusDays(1), current.today) }.getOrDefault(0)
+            if (copied == 0) {
+                mutableState.update { it.copy(message = "昨日の記録がありません") }
+            } else {
+                // コピー分もHealth Connectへ反映する。
+                if (!current.demoMode && current.permissionsGranted) {
+                    runCatching {
+                        foods.entriesOn(current.today).takeLast(copied).forEach { health.writeNutrition(it) }
+                    }
+                }
+                mutableState.update { it.copy(message = "昨日の${copied}件をコピーしました") }
+            }
+            refresh()
+        }
+    }
+
+    fun toggleFoodFavorite(foodId: String) {
+        val current = mutableState.value
+        val nowFavorite = foodId !in current.favoriteFoodIds
+        viewModelScope.launch {
+            runCatching { foods.setFavorite(foodId, nowFavorite) }
+            mutableState.update {
+                it.copy(
+                    favoriteFoodIds = if (nowFavorite) it.favoriteFoodIds + foodId else it.favoriteFoodIds - foodId,
+                )
+            }
+        }
+    }
+
+    /** 栄養データの優先元を切り替える(あすけん優先/VitaMorph優先)。 */
+    fun setNutritionSource(source: NutritionSource) {
+        store.setNutritionSource(source)
+        refresh()
     }
 
     private var dialogueSeedBump = 0
@@ -473,6 +618,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resetAll() {
         viewModelScope.launch {
             runCatching { profiles.clearAll() }
+            runCatching { foods.clearAll() }
             store.reset()
             mutableState.value = GameUiState()
             refresh()

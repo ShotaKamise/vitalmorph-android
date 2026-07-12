@@ -34,6 +34,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -65,8 +66,13 @@ import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.FoodCatalog
+import app.vitalmorph.domain.FoodCatalogItem
+import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.LegacyStats
+import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.MonsterGeneration
+import app.vitalmorph.domain.NutritionSource
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterForm
@@ -153,6 +159,12 @@ fun VitaMorphApp(
                     onDialogueChoice = viewModel::onDialogueChoice,
                     onTalkAgain = viewModel::talkAgain,
                     onStartMiniGame = viewModel::startMiniGame,
+                    onAddCatalogFood = viewModel::addCatalogFood,
+                    onAddManualFood = viewModel::addFood,
+                    onDeleteFood = viewModel::deleteFood,
+                    onCopyYesterdayMeals = viewModel::copyYesterdayMeals,
+                    onToggleFoodFavorite = viewModel::toggleFoodFavorite,
+                    onSetNutritionSource = viewModel::setNutritionSource,
                 )
             }
         }
@@ -266,6 +278,12 @@ private fun MainGameScreen(
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
+    onAddCatalogFood: (MealSlot, FoodCatalogItem, Double) -> Unit,
+    onAddManualFood: (MealSlot, String, Double, String, Double, Double, Double, Double, Boolean) -> Unit,
+    onDeleteFood: (FoodEntry) -> Unit,
+    onCopyYesterdayMeals: () -> Unit,
+    onToggleFoodFavorite: (String) -> Unit,
+    onSetNutritionSource: (NutritionSource) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -318,10 +336,18 @@ private fun MainGameScreen(
                     onTalkAgain,
                     onStartMiniGame,
                 )
+                AppTab.MEALS -> MealsScreen(
+                    state = state,
+                    onAddCatalog = onAddCatalogFood,
+                    onAddManual = onAddManualFood,
+                    onDelete = onDeleteFood,
+                    onCopyYesterday = onCopyYesterdayMeals,
+                    onToggleFavorite = onToggleFoodFavorite,
+                )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
                 AppTab.TRAINER -> TrainerScreen(state)
-                AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset, onSetTrainerName)
+                AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset, onSetTrainerName, onSetNutritionSource)
             }
         }
     }
@@ -987,6 +1013,7 @@ private fun SettingsScreen(
     onCompleteSeason: () -> Unit,
     onReset: () -> Unit,
     onSetTrainerName: (String) -> Unit,
+    onSetNutritionSource: (NutritionSource) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1022,8 +1049,36 @@ private fun SettingsScreen(
         item {
             ElevatedCard {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("栄養データの優先元", fontWeight = FontWeight.Bold)
+                    Text(
+                        "あすけん等の記録とVitaMorphの記録がある日に、どちらを育成へ使うかを選びます。合算はしません。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    listOf(NutritionSource.VITALMORPH_FIRST, NutritionSource.ASKEN_FIRST).forEach { source ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = state.nutritionSource == source,
+                                onClick = { onSetNutritionSource(source) },
+                            )
+                            Column {
+                                Text(source.label)
+                                Text(source.description, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            ElevatedCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("プライバシー", fontWeight = FontWeight.Bold)
                     Text("健康データは端末内でのみ処理します。ゲームはネットワーク権限を要求しません。")
+                    Text(
+                        "VitaMorphで記録した食事は、許可があればHealth Connectにも保存されます(このアプリのData Origin付き)。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(FoodCatalog.ATTRIBUTION, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

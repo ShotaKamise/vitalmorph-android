@@ -34,15 +34,19 @@
 - (v0.7 / Phase 4) 継承ポイントのバトル反映(1pt=+1%、各能力15%上限、減らない)
 - (v0.7 / Phase 4) トレーナータブの系譜画面(歴代の性別、最終形態、大会順位、継承内容)
 - (v0.7 / Phase 4) 世代記録の拡張(Room v3: finalFormId、finalPlacement、awarded*列)
+- (v0.8 / Phase 5) 食事タブ(朝昼夕間の入力、代表食品カタログ約60品目、手入力、自作食品、お気に入り、最近の記録、前日コピー)
+- (v0.8 / Phase 5) 日次サマリー(目標との差、PFCバー)と直近7日のエネルギーグラフ
+- (v0.8 / Phase 5) Health ConnectへのNutritionRecord書き込み(Client Record ID付き、削除も同期)
+- (v0.8 / Phase 5) 栄養データの優先元選択(VitaMorph優先/あすけん優先。合算しない)とRoom v4(food_entry等3テーブル)
 
 ## 現在のバージョン
 
 - applicationId: `app.vitalmorph`
-- versionCode: `8`
-- versionName: `0.7.0`
+- versionCode: `9`
+- versionName: `0.8.0`
 - minSdk: `28`
 - targetSdk / compileSdk: `36`
-- Room: `2.8.4`(KSP `2.3.9`、スキーマは `app/schemas/` へ出力、DBバージョン3)
+- Room: `2.8.4`(KSP `2.3.9`、スキーマは `app/schemas/` へ出力、DBバージョン4)
 
 ## Phase 2の実装メモ
 
@@ -74,13 +78,23 @@
 - 大会順位は結果画面を閉じた後でも記録できるよう、保存済み大会ポイントから `placementForPoints` で復元する。
 - 新世代は `MonsterGeneration` のデフォルト値で孵化するため、機嫌50・絆0への初期化は自動で満たされる。
 
+## Phase 5の実装メモ
+
+- 優先元の既定は「VitaMorph優先」(2026-07-12ユーザー決定)。設定タブで「あすけん優先」へ変更可能。異なるアプリの記録は合算しない(`NutritionResolver`)。
+- 二重計上対策: VitaMorphが書き込むNutritionRecordにはClient Record ID(`vitalmorph-food-<UUID>`)を付け、読み取り時は自パッケージのData Originを除外する(`HealthConnectRepository.readDays`)。
+- 栄養の読み取りを集計APIからレコード単位に変更した(Origin別に分けるため)。歩数・活動カロリーは従来どおり集計APIを使用。
+- 代表食品カタログ(約60品目)は成分表(八訂)を基にした1食分の概算値。出典表記は設定タブとコード(`FoodCatalog.ATTRIBUTION`)。全量(約2,500品目)の導入はPhase 6で判断。
+- WRITE_NUTRITION権限を追加したため、既存ユーザーは初回に権限の再許可が必要(ホームのカードから許可できる)。
+- Health Connect未接続でも食事記録は動作し、育成へ反映される(`NutritionResolver.mergeDays` がローカル記録だけで日次データを構築)。
+- デモモードはデモデータをそのまま使い、食事記録のマージとHC書き込みを行わない。
+- 「日ごとに選択」(SELECT_PER_DAY)はenum定義のみで、UIはPhase 6で提供。現状はVitaMorph優先と同じ挙動。
+
 ## まだ実装していないもの
 
 - 性格
 - ミニゲームの `MINIGAME_SUCCESS` モーション連携(Codexのモーション完成待ち)
-- VitaMorph内での食事入力、食品検索、履歴、お気に入り(Phase 5)
-- Health ConnectへのNutritionRecord書き込み(Phase 5)
-- バーコード検索(Phase 6)
+- 優先元「日ごとに選択」のUI(Phase 6)
+- バーコード検索、外部食品候補、レシピ、ビタミン・ミネラル(Phase 6)
 
 ## 現在の既知の制約
 
@@ -94,16 +108,15 @@
 
 ## Claudeが次に行う作業
 
-Phase 4のClaude担当分は実装完了。`docs/IMPLEMENTATION_PLAN.md` のPhase 5(食事管理MVP)に着手する。
+Phase 5のClaude担当分は実装完了。残るは `docs/IMPLEMENTATION_PLAN.md` のPhase 6(食品機能拡張)のみ。
 
-1. 朝食・昼食・夕食・間食の食事入力(食品名、量、カロリー、PFC)
-2. 自作食品、お気に入り、履歴、前日コピー
-3. 日次・週次グラフと目標との差
-4. 文部科学省の日本食品標準成分表の利用条件確認(組み込み前にユーザーへ確認)
-5. Health ConnectへのNutritionRecord書き込み(Client Record ID・Data Origin利用、あすけんとの二重計上回避)
-6. 栄養データの優先元選択(あすけん優先 / VitaMorph優先 / 日ごと)
+1. バーコードスキャン(カメラ権限の追加が必要)
+2. Open Food Factsなどの外部食品候補(初の外部通信。目的・送信項目・保存期間をユーザーへ先に説明する)
+3. 結果確認と手動修正、レシピ登録、ビタミン・ミネラル
+4. 優先元「日ごとに選択」のUI
+5. AndroidManifestのネットワーク権限、プライバシー説明、オフライン動作
 
-Phase 5は外部データソースの利用条件とHealth Connect書き込みという判断ポイントがあるため、着手時にユーザーへ方針を確認する。
+Phase 6は「外部通信を追加しない」という現在のプライバシー方針を変える判断を含むため、着手前にユーザーへ範囲を確認する。
 
 ## Codexへの依頼
 

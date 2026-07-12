@@ -1,6 +1,7 @@
 package app.vitalmorph.data
 
 import android.content.Context
+import app.vitalmorph.domain.NutritionSource
 import app.vitalmorph.domain.TrainerProgress
 import app.vitalmorph.domain.UserGoals
 import app.vitalmorph.domain.WorkoutTag
@@ -15,6 +16,7 @@ data class StoredGameState(
     val demoMode: Boolean,
     val demoDayOffset: Int,
     val tournamentPoints: Int,
+    val nutritionSource: NutritionSource,
 )
 
 class GameStore(context: Context) {
@@ -38,7 +40,15 @@ class GameStore(context: Context) {
         demoMode = preferences.getBoolean("demo_mode", false),
         demoDayOffset = preferences.getInt("demo_day_offset", 0),
         tournamentPoints = preferences.getInt("tournament_points", 0),
+        nutritionSource = preferences.getString("nutrition_source", null)
+            ?.let { runCatching { NutritionSource.valueOf(it) }.getOrNull() }
+            ?: NutritionSource.VITALMORPH_FIRST,
     )
+
+    /** 栄養データの優先元(2026-07-12ユーザー決定の既定はVitaMorph優先)。 */
+    fun setNutritionSource(source: NutritionSource) {
+        preferences.edit().putString("nutrition_source", source.name).apply()
+    }
 
     fun completeOnboarding(goals: UserGoals, demoMode: Boolean) {
         preferences.edit()

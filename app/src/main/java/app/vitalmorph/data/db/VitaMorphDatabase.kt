@@ -13,8 +13,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MonsterGenerationEntity::class,
         LegacyStatsEntity::class,
         InteractionStateEntity::class,
+        FoodEntryEntity::class,
+        CustomFoodEntity::class,
+        FoodFavoriteEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class VitaMorphDatabase : RoomDatabase() {
@@ -22,6 +25,9 @@ abstract class VitaMorphDatabase : RoomDatabase() {
     abstract fun monsterGenerationDao(): MonsterGenerationDao
     abstract fun legacyStatsDao(): LegacyStatsDao
     abstract fun interactionStateDao(): InteractionStateDao
+    abstract fun foodEntryDao(): FoodEntryDao
+    abstract fun customFoodDao(): CustomFoodDao
+    abstract fun foodFavoriteDao(): FoodFavoriteDao
 
     companion object {
         private const val DATABASE_NAME = "vitalmorph.db"
@@ -55,6 +61,31 @@ abstract class VitaMorphDatabase : RoomDatabase() {
             }
         }
 
+        /** v4: 食事管理MVP用のテーブルを追加。既存テーブルは変更しない。 */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `food_entry` (" +
+                        "`entryId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`date` TEXT NOT NULL, `mealSlot` TEXT NOT NULL, `foodName` TEXT NOT NULL, " +
+                        "`amount` REAL NOT NULL, `amountUnit` TEXT NOT NULL, " +
+                        "`calories` REAL NOT NULL, `proteinGrams` REAL NOT NULL, " +
+                        "`fatGrams` REAL NOT NULL, `carbsGrams` REAL NOT NULL, " +
+                        "`clientRecordId` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `custom_food` (" +
+                        "`foodId` TEXT PRIMARY KEY NOT NULL, `name` TEXT NOT NULL, " +
+                        "`standardAmount` REAL NOT NULL, `amountUnit` TEXT NOT NULL, " +
+                        "`calories` REAL NOT NULL, `proteinGrams` REAL NOT NULL, " +
+                        "`fatGrams` REAL NOT NULL, `carbsGrams` REAL NOT NULL, `createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `food_favorite` (`foodId` TEXT PRIMARY KEY NOT NULL)",
+                )
+            }
+        }
+
         @Volatile
         private var instance: VitaMorphDatabase? = null
 
@@ -65,7 +96,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
                     VitaMorphDatabase::class.java,
                     DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

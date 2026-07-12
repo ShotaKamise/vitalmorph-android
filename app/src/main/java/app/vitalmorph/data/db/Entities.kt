@@ -2,7 +2,10 @@ package app.vitalmorph.data.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import app.vitalmorph.domain.FoodCatalogItem
+import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.InteractionState
+import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MonsterSex
@@ -73,6 +76,101 @@ data class MonsterGenerationEntity(
         )
     }
 }
+
+@Entity(tableName = "food_entry")
+data class FoodEntryEntity(
+    @PrimaryKey(autoGenerate = true) val entryId: Long = 0,
+    val date: String,
+    val mealSlot: String,
+    val foodName: String,
+    val amount: Double,
+    val amountUnit: String,
+    val calories: Double,
+    val proteinGrams: Double,
+    val fatGrams: Double,
+    val carbsGrams: Double,
+    val clientRecordId: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+) {
+    fun toDomain() = FoodEntry(
+        entryId = entryId,
+        date = LocalDate.parse(date),
+        mealSlot = MealSlot.valueOf(mealSlot),
+        foodName = foodName,
+        amount = amount,
+        amountUnit = amountUnit,
+        calories = calories,
+        proteinGrams = proteinGrams,
+        fatGrams = fatGrams,
+        carbsGrams = carbsGrams,
+        clientRecordId = clientRecordId,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+    )
+
+    companion object {
+        fun fromDomain(entry: FoodEntry) = FoodEntryEntity(
+            entryId = entry.entryId,
+            date = entry.date.toString(),
+            mealSlot = entry.mealSlot.name,
+            foodName = entry.foodName,
+            amount = entry.amount,
+            amountUnit = entry.amountUnit,
+            calories = entry.calories,
+            proteinGrams = entry.proteinGrams,
+            fatGrams = entry.fatGrams,
+            carbsGrams = entry.carbsGrams,
+            clientRecordId = entry.clientRecordId,
+            createdAt = entry.createdAt,
+            updatedAt = entry.updatedAt,
+        )
+    }
+}
+
+@Entity(tableName = "custom_food")
+data class CustomFoodEntity(
+    @PrimaryKey val foodId: String,
+    val name: String,
+    val standardAmount: Double,
+    val amountUnit: String,
+    val calories: Double,
+    val proteinGrams: Double,
+    val fatGrams: Double,
+    val carbsGrams: Double,
+    val createdAt: Long,
+) {
+    fun toDomain() = FoodCatalogItem(
+        foodId = foodId,
+        name = name,
+        standardAmount = standardAmount,
+        amountUnit = amountUnit,
+        calories = calories,
+        proteinGrams = proteinGrams,
+        fatGrams = fatGrams,
+        carbsGrams = carbsGrams,
+        isCustom = true,
+    )
+
+    companion object {
+        fun fromDomain(item: FoodCatalogItem, createdAt: Long) = CustomFoodEntity(
+            foodId = item.foodId,
+            name = item.name,
+            standardAmount = item.standardAmount,
+            amountUnit = item.amountUnit,
+            calories = item.calories,
+            proteinGrams = item.proteinGrams,
+            fatGrams = item.fatGrams,
+            carbsGrams = item.carbsGrams,
+            createdAt = createdAt,
+        )
+    }
+}
+
+@Entity(tableName = "food_favorite")
+data class FoodFavoriteEntity(
+    @PrimaryKey val foodId: String,
+)
 
 @Entity(tableName = "interaction_state")
 data class InteractionStateEntity(
