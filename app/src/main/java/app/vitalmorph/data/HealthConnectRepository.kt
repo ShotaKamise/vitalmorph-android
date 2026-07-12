@@ -129,6 +129,9 @@ class HealthConnectRepository(private val context: Context) {
                         protein = Mass.grams(entry.proteinGrams),
                         totalFat = Mass.grams(entry.fatGrams),
                         totalCarbohydrate = Mass.grams(entry.carbsGrams),
+                        vitaminC = Mass.milligrams(entry.vitaminCMg).takeIf { entry.vitaminCMg > 0 },
+                        calcium = Mass.milligrams(entry.calciumMg).takeIf { entry.calciumMg > 0 },
+                        iron = Mass.milligrams(entry.ironMg).takeIf { entry.ironMg > 0 },
                         name = entry.foodName,
                         mealType = when (entry.mealSlot) {
                             MealSlot.BREAKFAST -> MealType.MEAL_TYPE_BREAKFAST

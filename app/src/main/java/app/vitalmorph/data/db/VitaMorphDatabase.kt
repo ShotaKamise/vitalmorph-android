@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CustomFoodEntity::class,
         FoodFavoriteEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class VitaMorphDatabase : RoomDatabase() {
@@ -86,6 +86,15 @@ abstract class VitaMorphDatabase : RoomDatabase() {
             }
         }
 
+        /** v5: 食事記録へ代表的なビタミン・ミネラル(VC/Ca/Fe)の列を追加。既存行は0。 */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `food_entry` ADD COLUMN `vitaminCMg` REAL NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `food_entry` ADD COLUMN `calciumMg` REAL NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `food_entry` ADD COLUMN `ironMg` REAL NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile
         private var instance: VitaMorphDatabase? = null
 
@@ -96,7 +105,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
                     VitaMorphDatabase::class.java,
                     DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }

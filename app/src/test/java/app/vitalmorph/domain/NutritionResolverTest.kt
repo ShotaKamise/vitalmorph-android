@@ -77,6 +77,52 @@ class NutritionResolverTest {
     }
 
     @Test
+    fun `select per day follows the stored choice and falls back to recorded side`() {
+        // その日の選択がASKENなら外部を使う。
+        assertEquals(
+            external,
+            NutritionResolver.resolveDay(NutritionSource.SELECT_PER_DAY, local, external, DayNutritionChoice.ASKEN),
+        )
+        // VITALMORPH選択ならローカル。
+        assertEquals(
+            local,
+            NutritionResolver.resolveDay(NutritionSource.SELECT_PER_DAY, local, external, DayNutritionChoice.VITALMORPH),
+        )
+        // 未選択の日は記録した側(ローカル優先)。
+        assertEquals(
+            local,
+            NutritionResolver.resolveDay(NutritionSource.SELECT_PER_DAY, local, external, null),
+        )
+        // 選んだ側に記録が無ければもう一方へフォールバック。
+        assertEquals(
+            local,
+            NutritionResolver.resolveDay(NutritionSource.SELECT_PER_DAY, local, null, DayNutritionChoice.ASKEN),
+        )
+    }
+
+    @Test
+    fun `merge days applies per date choices`() {
+        val base = listOf(
+            DailyHealthData(date = start, calories = 2_100.0, hasNutrition = true),
+            DailyHealthData(date = start.plusDays(1), calories = 2_100.0, hasNutrition = true),
+        )
+        val entries = mapOf(
+            start to listOf(entry(start, 1_500.0)),
+            start.plusDays(1) to listOf(entry(start.plusDays(1), 1_500.0)),
+        )
+        val merged = NutritionResolver.mergeDays(
+            base,
+            entries,
+            NutritionSource.SELECT_PER_DAY,
+            start,
+            start.plusDays(1),
+            dayChoices = mapOf(start to DayNutritionChoice.ASKEN),
+        )
+        assertEquals(2_100.0, merged[0].calories, 0.001)
+        assertEquals(1_500.0, merged[1].calories, 0.001)
+    }
+
+    @Test
     fun `asken first keeps external totals even with local entries`() {
         val base = listOf(
             DailyHealthData(date = start, calories = 2_100.0, proteinGrams = 85.0, fatGrams = 60.0, carbsGrams = 260.0, hasNutrition = true),

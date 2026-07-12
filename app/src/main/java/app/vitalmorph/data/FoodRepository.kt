@@ -36,6 +36,9 @@ class FoodRepository(
         proteinGrams: Double,
         fatGrams: Double,
         carbsGrams: Double,
+        vitaminCMg: Double = 0.0,
+        calciumMg: Double = 0.0,
+        ironMg: Double = 0.0,
     ): FoodEntry {
         val timestamp = now()
         val entry = FoodEntry(
@@ -48,6 +51,9 @@ class FoodRepository(
             proteinGrams = proteinGrams.coerceAtLeast(0.0),
             fatGrams = fatGrams.coerceAtLeast(0.0),
             carbsGrams = carbsGrams.coerceAtLeast(0.0),
+            vitaminCMg = vitaminCMg.coerceAtLeast(0.0),
+            calciumMg = calciumMg.coerceAtLeast(0.0),
+            ironMg = ironMg.coerceAtLeast(0.0),
             clientRecordId = "vitalmorph-food-${UUID.randomUUID()}",
             createdAt = timestamp,
             updatedAt = timestamp,
@@ -74,6 +80,9 @@ class FoodRepository(
                 proteinGrams = entry.proteinGrams,
                 fatGrams = entry.fatGrams,
                 carbsGrams = entry.carbsGrams,
+                vitaminCMg = entry.vitaminCMg,
+                calciumMg = entry.calciumMg,
+                ironMg = entry.ironMg,
             )
         }
         return source.size

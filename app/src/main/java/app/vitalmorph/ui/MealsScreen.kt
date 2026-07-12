@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,7 +37,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.vitalmorph.data.ExternalFood
 import app.vitalmorph.domain.DailyHealthData
+import app.vitalmorph.domain.DayNutritionChoice
 import app.vitalmorph.domain.FoodCatalog
 import app.vitalmorph.domain.FoodCatalogItem
 import app.vitalmorph.domain.FoodEntry
@@ -53,12 +56,30 @@ private val MealSurfaceHigh = Color(0xFF1D344A)
 fun MealsScreen(
     state: GameUiState,
     onAddCatalog: (MealSlot, FoodCatalogItem, Double) -> Unit,
-    onAddManual: (MealSlot, String, Double, String, Double, Double, Double, Double, Boolean) -> Unit,
+    onAddManual: (MealSlot, String, Double, String, Double, Double, Double, Double, Boolean, Double, Double, Double) -> Unit,
     onDelete: (FoodEntry) -> Unit,
     onCopyYesterday: () -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onSearchExternal: (String) -> Unit,
+    onLookupBarcode: (String) -> Unit,
+    onAddExternal: (MealSlot, ExternalFood, Double) -> Unit,
+    onClearExternal: () -> Unit,
+    onSetTodayChoice: (DayNutritionChoice) -> Unit,
+    onSaveRecipe: (String, List<Pair<FoodCatalogItem, Double>>) -> Unit,
 ) {
     var addingSlot by remember { mutableStateOf<MealSlot?>(null) }
+    var showScanner by remember { mutableStateOf(false) }
+
+    if (showScanner) {
+        BarcodeScannerOverlay(
+            onDetected = { code ->
+                showScanner = false
+                onLookupBarcode(code)
+            },
+            onCancel = { showScanner = false },
+        )
+        return
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -73,6 +94,9 @@ fun MealsScreen(
                 color = Color.White.copy(alpha = 0.6f),
             )
         }
+        if (state.nutritionSource == NutritionSource.SELECT_PER_DAY) {
+            item { DayChoiceCard(state.todayNutritionChoice, onSetTodayChoice) }
+        }
         item { DailyNutritionCard(state.foodEntriesToday, state.goals) }
         item {
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onCopyYesterday) {
@@ -86,20 +110,30 @@ fun MealsScreen(
                     entries = state.foodEntriesToday.filter { it.mealSlot == slot },
                     isAdding = addingSlot == slot,
                     state = state,
-                    onStartAdd = { addingSlot = if (addingSlot == slot) null else slot },
+                    onStartAdd = {
+                        addingSlot = if (addingSlot == slot) null else slot
+                        onClearExternal()
+                    },
                     onAddCatalog = { item, amount ->
                         onAddCatalog(slot, item, amount)
                         addingSlot = null
                     },
-                    onAddManual = { name, amount, unit, kcal, p, f, c, save ->
-                        onAddManual(slot, name, amount, unit, kcal, p, f, c, save)
+                    onAddManual = { name, amount, unit, kcal, p, f, c, save, vc, ca, fe ->
+                        onAddManual(slot, name, amount, unit, kcal, p, f, c, save, vc, ca, fe)
                         addingSlot = null
                     },
                     onDelete = onDelete,
                     onToggleFavorite = onToggleFavorite,
+                    onSearchExternal = onSearchExternal,
+                    onScanBarcode = { showScanner = true },
+                    onAddExternal = { food, grams ->
+                        onAddExternal(slot, food, grams)
+                        addingSlot = null
+                    },
                 )
             }
         }
+        item { RecipeBuilderCard(state, onSaveRecipe) }
         item { WeeklyCaloriesCard(state.days.takeLast(7), state.goals) }
         item {
             Text(
@@ -107,6 +141,109 @@ fun MealsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.45f),
             )
+        }
+        item {
+            Text(
+                "ネット検索はOpen Food Facts(world.openfoodfacts.org)を利用します。送信されるのは検索キーワードまたはバーコード番号のみです。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.45f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DayChoiceCard(
+    current: DayNutritionChoice?,
+    onSetTodayChoice: (DayNutritionChoice) -> Unit,
+) {
+    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MealSurfaceHigh)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("今日の優先元", fontWeight = FontWeight.Bold)
+            Text(
+                "今日どちらの記録を育成へ使うか選べます。未選択なら記録した側を使います。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DayNutritionChoice.entries.forEach { choice ->
+                    if (current == choice) {
+                        Button(onClick = {}) { Text(choice.label) }
+                    } else {
+                        OutlinedButton(onClick = { onSetTodayChoice(choice) }) { Text(choice.label) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecipeBuilderCard(
+    state: GameUiState,
+    onSaveRecipe: (String, List<Pair<FoodCatalogItem, Double>>) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var recipeName by remember { mutableStateOf("") }
+    var query by remember { mutableStateOf("") }
+    val parts = remember { mutableStateListOf<Pair<FoodCatalogItem, Double>>() }
+
+    ElevatedCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("レシピを作る", fontWeight = FontWeight.Bold)
+                TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "閉じる" else "開く") }
+            }
+            if (!expanded) {
+                Text("よく食べる組み合わせを1つの自作食品として保存できます。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                OutlinedTextField(
+                    value = recipeName,
+                    onValueChange = { recipeName = it.take(20) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("レシピ名(例: いつもの朝食)") },
+                    singleLine = true,
+                )
+                parts.forEachIndexed { index, (item, amount) ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${item.name} ${amount.roundToInt()}${item.amountUnit}(${item.scaledTo(amount).calories.roundToInt()}kcal)",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = { parts.removeAt(index) }) { Text("外す") }
+                    }
+                }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("材料をさがして追加") },
+                    singleLine = true,
+                )
+                if (query.isNotBlank()) {
+                    FoodCatalog.search(query, state.customFoods).take(4).forEach { item ->
+                        TextButton(onClick = {
+                            parts += item to item.standardAmount
+                            query = ""
+                        }) {
+                            Text("＋ ${item.name}(${item.standardAmount.roundToInt()}${item.amountUnit})", color = Color.White)
+                        }
+                    }
+                }
+                if (parts.isNotEmpty()) {
+                    val total = parts.sumOf { (item, amount) -> item.scaledTo(amount).calories }
+                    Text("合計 ${total.roundToInt()}kcal・1食として保存されます", color = MealGold, style = MaterialTheme.typography.labelMedium)
+                }
+                Button(
+                    onClick = {
+                        onSaveRecipe(recipeName, parts.toList())
+                        recipeName = ""
+                        parts.clear()
+                        expanded = false
+                    },
+                    enabled = recipeName.isNotBlank() && parts.isNotEmpty(),
+                ) { Text("レシピを保存") }
+            }
         }
     }
 }
@@ -136,6 +273,16 @@ private fun DailyNutritionCard(entries: List<FoodEntry>, goals: UserGoals) {
                 },
                 style = MaterialTheme.typography.bodySmall,
             )
+            val vitaminC = entries.sumOf { it.vitaminCMg }
+            val calcium = entries.sumOf { it.calciumMg }
+            val iron = entries.sumOf { it.ironMg }
+            if (vitaminC > 0 || calcium > 0 || iron > 0) {
+                Text(
+                    "ビタミンC ${vitaminC.roundToInt()}mg・カルシウム ${calcium.roundToInt()}mg・鉄 ${"%.1f".format(iron)}mg(記録がある食品のみの参考値)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.55f),
+                )
+            }
         }
     }
 }
@@ -162,9 +309,12 @@ private fun MealSlotCard(
     state: GameUiState,
     onStartAdd: () -> Unit,
     onAddCatalog: (FoodCatalogItem, Double) -> Unit,
-    onAddManual: (String, Double, String, Double, Double, Double, Double, Boolean) -> Unit,
+    onAddManual: (String, Double, String, Double, Double, Double, Double, Boolean, Double, Double, Double) -> Unit,
     onDelete: (FoodEntry) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onSearchExternal: (String) -> Unit,
+    onScanBarcode: () -> Unit,
+    onAddExternal: (ExternalFood, Double) -> Unit,
 ) {
     ElevatedCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -199,6 +349,9 @@ private fun MealSlotCard(
                     onAddCatalog = onAddCatalog,
                     onAddManual = onAddManual,
                     onToggleFavorite = onToggleFavorite,
+                    onSearchExternal = onSearchExternal,
+                    onScanBarcode = onScanBarcode,
+                    onAddExternal = onAddExternal,
                 )
             }
         }
@@ -209,11 +362,15 @@ private fun MealSlotCard(
 private fun AddFoodPanel(
     state: GameUiState,
     onAddCatalog: (FoodCatalogItem, Double) -> Unit,
-    onAddManual: (String, Double, String, Double, Double, Double, Double, Boolean) -> Unit,
+    onAddManual: (String, Double, String, Double, Double, Double, Double, Boolean, Double, Double, Double) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    onSearchExternal: (String) -> Unit,
+    onScanBarcode: () -> Unit,
+    onAddExternal: (ExternalFood, Double) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<FoodCatalogItem?>(null) }
+    var selectedExternal by remember { mutableStateOf<ExternalFood?>(null) }
     var amountText by remember { mutableStateOf("") }
     var manualMode by remember { mutableStateOf(false) }
 
@@ -221,18 +378,70 @@ private fun AddFoodPanel(
         if (!manualMode) {
             OutlinedTextField(
                 value = query,
-                onValueChange = { query = it; selected = null },
+                onValueChange = { query = it; selected = null; selectedExternal = null },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("食品をさがす") },
                 singleLine = true,
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { if (query.isNotBlank()) onSearchExternal(query) }, enabled = query.isNotBlank()) {
+                    Text("🌐 ネットで検索")
+                }
+                OutlinedButton(onClick = onScanBarcode) { Text("📷 バーコード") }
+            }
+            if (state.externalSearching) {
+                Text("Open Food Factsを検索中…", style = MaterialTheme.typography.bodySmall, color = MealGold)
+            }
+            val externalSelection = selectedExternal
+            if (externalSelection != null) {
+                Text(externalSelection.displayName, fontWeight = FontWeight.Bold)
+                Text(
+                    "100gあたり ${externalSelection.caloriesPer100g.roundToInt()}kcal " +
+                        "P${externalSelection.proteinPer100g.roundToInt()} F${externalSelection.fatPer100g.roundToInt()} C${externalSelection.carbsPer100g.roundToInt()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { amountText = it.filter { ch -> ch.isDigit() || ch == '.' }.take(6) },
+                        modifier = Modifier.width(120.dp),
+                        label = { Text("数量") },
+                        suffix = { Text("g") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                    val grams = amountText.toDoubleOrNull() ?: 0.0
+                    Text("${(externalSelection.caloriesPer100g * grams / 100.0).roundToInt()}kcal", color = MealGold)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val grams = amountText.toDoubleOrNull()
+                            if (grams != null && grams > 0) onAddExternal(externalSelection, grams)
+                        },
+                        enabled = (amountText.toDoubleOrNull() ?: 0.0) > 0,
+                    ) { Text("確認して記録") }
+                    OutlinedButton(onClick = { selectedExternal = null }) { Text("選び直す") }
+                }
+            } else if (state.externalResults.isNotEmpty() && selected == null) {
+                Text("ネット検索の結果(内容を確認してから記録):", style = MaterialTheme.typography.labelMedium, color = MealGold)
+                state.externalResults.take(6).forEach { food ->
+                    TextButton(onClick = {
+                        selectedExternal = food
+                        amountText = "100"
+                    }) {
+                        Text("🌐 ${food.displayName}(${food.caloriesPer100g.roundToInt()}kcal/100g)", color = Color.White)
+                    }
+                }
+            }
             val results = remember(query, state.customFoods, state.favoriteFoodIds) {
                 val all = FoodCatalog.search(query, state.customFoods)
                 // お気に入りを先頭へ。
                 all.sortedByDescending { it.foodId in state.favoriteFoodIds }.take(8)
             }
             val currentSelection = selected
-            if (currentSelection == null) {
+            if (currentSelection == null && selectedExternal == null && state.externalResults.isEmpty()) {
                 results.forEach { item ->
                     Row(
                         Modifier.fillMaxWidth(),
@@ -274,7 +483,7 @@ private fun AddFoodPanel(
                         }
                     }
                 }
-            } else {
+            } else if (currentSelection != null) {
                 Text(currentSelection.name, fontWeight = FontWeight.Bold)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -310,7 +519,7 @@ private fun AddFoodPanel(
 
 @Composable
 private fun ManualFoodForm(
-    onAdd: (String, Double, String, Double, Double, Double, Double, Boolean) -> Unit,
+    onAdd: (String, Double, String, Double, Double, Double, Double, Boolean, Double, Double, Double) -> Unit,
     onBack: () -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
@@ -320,6 +529,9 @@ private fun ManualFoodForm(
     var protein by remember { mutableStateOf("") }
     var fat by remember { mutableStateOf("") }
     var carbs by remember { mutableStateOf("") }
+    var vitaminC by remember { mutableStateOf("") }
+    var calcium by remember { mutableStateOf("") }
+    var iron by remember { mutableStateOf("") }
     var saveAsCustom by remember { mutableStateOf(false) }
 
     fun numeric(value: String) = value.filter { it.isDigit() || it == '.' }.take(6)
@@ -383,6 +595,33 @@ private fun ManualFoodForm(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
         }
+        Text("ビタミン・ミネラル(任意)", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.6f))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = vitaminC,
+                onValueChange = { vitaminC = numeric(it) },
+                modifier = Modifier.weight(1f),
+                label = { Text("VC(mg)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+            OutlinedTextField(
+                value = calcium,
+                onValueChange = { calcium = numeric(it) },
+                modifier = Modifier.weight(1f),
+                label = { Text("Ca(mg)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+            OutlinedTextField(
+                value = iron,
+                onValueChange = { iron = numeric(it) },
+                modifier = Modifier.weight(1f),
+                label = { Text("鉄(mg)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = saveAsCustom, onCheckedChange = { saveAsCustom = it })
             Text("自作食品として保存(次回から検索できます)", style = MaterialTheme.typography.bodySmall)
@@ -399,6 +638,9 @@ private fun ManualFoodForm(
                         fat.toDoubleOrNull() ?: 0.0,
                         carbs.toDoubleOrNull() ?: 0.0,
                         saveAsCustom,
+                        vitaminC.toDoubleOrNull() ?: 0.0,
+                        calcium.toDoubleOrNull() ?: 0.0,
+                        iron.toDoubleOrNull() ?: 0.0,
                     )
                 },
                 enabled = name.isNotBlank() && (kcal.toDoubleOrNull() ?: 0.0) >= 0 && (amount.toDoubleOrNull() ?: 0.0) > 0,

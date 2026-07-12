@@ -62,6 +62,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
+import app.vitalmorph.data.ExternalFood
+import app.vitalmorph.domain.DayNutritionChoice
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
@@ -165,6 +167,12 @@ fun VitaMorphApp(
                     onCopyYesterdayMeals = viewModel::copyYesterdayMeals,
                     onToggleFoodFavorite = viewModel::toggleFoodFavorite,
                     onSetNutritionSource = viewModel::setNutritionSource,
+                    onSearchExternalFood = viewModel::searchExternalFood,
+                    onLookupBarcode = viewModel::lookupBarcode,
+                    onAddExternalFood = viewModel::addExternalFood,
+                    onClearExternalResults = viewModel::clearExternalResults,
+                    onSetTodayNutritionChoice = viewModel::setTodayNutritionChoice,
+                    onSaveRecipe = viewModel::saveRecipe,
                 )
             }
         }
@@ -279,11 +287,17 @@ private fun MainGameScreen(
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
     onAddCatalogFood: (MealSlot, FoodCatalogItem, Double) -> Unit,
-    onAddManualFood: (MealSlot, String, Double, String, Double, Double, Double, Double, Boolean) -> Unit,
+    onAddManualFood: (MealSlot, String, Double, String, Double, Double, Double, Double, Boolean, Double, Double, Double) -> Unit,
     onDeleteFood: (FoodEntry) -> Unit,
     onCopyYesterdayMeals: () -> Unit,
     onToggleFoodFavorite: (String) -> Unit,
     onSetNutritionSource: (NutritionSource) -> Unit,
+    onSearchExternalFood: (String) -> Unit,
+    onLookupBarcode: (String) -> Unit,
+    onAddExternalFood: (MealSlot, ExternalFood, Double) -> Unit,
+    onClearExternalResults: () -> Unit,
+    onSetTodayNutritionChoice: (DayNutritionChoice) -> Unit,
+    onSaveRecipe: (String, List<Pair<FoodCatalogItem, Double>>) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -343,6 +357,12 @@ private fun MainGameScreen(
                     onDelete = onDeleteFood,
                     onCopyYesterday = onCopyYesterdayMeals,
                     onToggleFavorite = onToggleFoodFavorite,
+                    onSearchExternal = onSearchExternalFood,
+                    onLookupBarcode = onLookupBarcode,
+                    onAddExternal = onAddExternalFood,
+                    onClearExternal = onClearExternalResults,
+                    onSetTodayChoice = onSetTodayNutritionChoice,
+                    onSaveRecipe = onSaveRecipe,
                 )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
@@ -1054,7 +1074,7 @@ private fun SettingsScreen(
                         "あすけん等の記録とVitaMorphの記録がある日に、どちらを育成へ使うかを選びます。合算はしません。",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    listOf(NutritionSource.VITALMORPH_FIRST, NutritionSource.ASKEN_FIRST).forEach { source ->
+                    NutritionSource.entries.forEach { source ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(
                                 selected = state.nutritionSource == source,
@@ -1073,7 +1093,11 @@ private fun SettingsScreen(
             ElevatedCard {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("プライバシー", fontWeight = FontWeight.Bold)
-                    Text("健康データは端末内でのみ処理します。ゲームはネットワーク権限を要求しません。")
+                    Text("健康データは端末内でのみ処理し、外部へ送信しません。")
+                    Text(
+                        "通信が発生するのは食品のネット検索(Open Food Facts)だけで、送信されるのは検索キーワードまたはバーコード番号のみです。バーコードの読み取り自体は端末内で処理されます。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     Text(
                         "VitaMorphで記録した食事は、許可があればHealth Connectにも保存されます(このアプリのData Origin付き)。",
                         style = MaterialTheme.typography.bodySmall,

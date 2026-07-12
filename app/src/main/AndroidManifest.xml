@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_NUTRITION" />
     <uses-permission android:name="android.permission.health.WRITE_NUTRITION" />
+    <!-- v0.9: Open Food Factsの食品検索のみに使用。健康データは送信しない。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- v0.9: バーコード読み取り(端末内処理)。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

@@ -5,9 +5,11 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.vitalmorph.data.DemoDataFactory
+import app.vitalmorph.data.ExternalFood
 import app.vitalmorph.data.FoodRepository
 import app.vitalmorph.data.GameStore
 import app.vitalmorph.data.HealthConnectRepository
+import app.vitalmorph.data.OpenFoodFactsRepository
 import app.vitalmorph.data.ProfileRepository
 import app.vitalmorph.data.db.VitaMorphDatabase
 import app.vitalmorph.domain.BattleEngine
@@ -16,6 +18,7 @@ import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueContext
 import app.vitalmorph.domain.DialogueEngine
 import app.vitalmorph.domain.DialogueLine
+import app.vitalmorph.domain.DayNutritionChoice
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.FoodCatalogItem
@@ -93,6 +96,9 @@ data class GameUiState(
     val favoriteFoodIds: Set<String> = emptySet(),
     val recentFoods: List<FoodEntry> = emptyList(),
     val nutritionSource: NutritionSource = NutritionSource.VITALMORPH_FIRST,
+    val todayNutritionChoice: DayNutritionChoice? = null,
+    val externalResults: List<ExternalFood> = emptyList(),
+    val externalSearching: Boolean = false,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -102,6 +108,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val health = HealthConnectRepository(application)
     private val profiles = ProfileRepository(VitaMorphDatabase.getInstance(application))
     private val foods = FoodRepository(VitaMorphDatabase.getInstance(application))
+    private val openFoodFacts = OpenFoodFactsRepository()
     private val mutableState = MutableStateFlow(GameUiState())
     val state: StateFlow<GameUiState> = mutableState.asStateFlow()
 
@@ -134,7 +141,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val entriesByDate = runCatching {
                     foods.entriesBetween(stored.seasonStart, seasonEnd).groupBy { it.date }
                 }.getOrDefault(emptyMap())
-                NutritionResolver.mergeDays(baseDays, entriesByDate, stored.nutritionSource, stored.seasonStart, seasonEnd)
+                NutritionResolver.mergeDays(
+                    baseDays,
+                    entriesByDate,
+                    stored.nutritionSource,
+                    stored.seasonStart,
+                    seasonEnd,
+                    stored.nutritionDayChoices,
+                )
             } else {
                 baseDays
             }
@@ -213,6 +227,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     favoriteFoodIds = favoriteFoodIds,
                     recentFoods = recentFoods,
                     nutritionSource = stored.nutritionSource,
+                    todayNutritionChoice = stored.nutritionDayChoices[today],
                 )
             }
         }
@@ -351,6 +366,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         fat: Double,
         carbs: Double,
         saveAsCustom: Boolean,
+        vitaminCMg: Double = 0.0,
+        calciumMg: Double = 0.0,
+        ironMg: Double = 0.0,
     ) {
         if (name.isBlank()) {
             mutableState.update { it.copy(message = "食品名を入力してください") }
@@ -369,6 +387,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     proteinGrams = protein,
                     fatGrams = fat,
                     carbsGrams = carbs,
+                    vitaminCMg = vitaminCMg,
+                    calciumMg = calciumMg,
+                    ironMg = ironMg,
                 )
                 if (saveAsCustom) {
                     foods.saveCustomFood(name, amount, unit, calories, protein, fat, carbs)
@@ -430,10 +451,119 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 栄養データの優先元を切り替える(あすけん優先/VitaMorph優先)。 */
+    /** 栄養データの優先元を切り替える(VitaMorph優先/あすけん優先/日ごとに選択)。 */
     fun setNutritionSource(source: NutritionSource) {
         store.setNutritionSource(source)
         refresh()
+    }
+
+    /** 「日ごとに選択」モードで今日の優先元を選ぶ。 */
+    fun setTodayNutritionChoice(choice: DayNutritionChoice) {
+        store.setNutritionDayChoice(mutableState.value.today, choice)
+        refresh()
+    }
+
+    /** Open Food Factsから食品名で検索する。送信するのはキーワードのみ。 */
+    fun searchExternalFood(query: String) {
+        if (query.isBlank()) return
+        mutableState.update { it.copy(externalSearching = true, externalResults = emptyList()) }
+        viewModelScope.launch {
+            val result = openFoodFacts.searchByName(query)
+            mutableState.update {
+                it.copy(
+                    externalSearching = false,
+                    externalResults = result.getOrDefault(emptyList()),
+                    message = when {
+                        result.isFailure -> "ネット検索に失敗しました。オフラインでも同梱カタログは使えます。"
+                        result.getOrDefault(emptyList()).isEmpty() -> "見つかりませんでした。手入力もできます。"
+                        else -> null
+                    },
+                )
+            }
+        }
+    }
+
+    /** バーコード番号からOpen Food Factsを照会する。送信するのは番号のみ。 */
+    fun lookupBarcode(barcode: String) {
+        mutableState.update { it.copy(externalSearching = true, externalResults = emptyList()) }
+        viewModelScope.launch {
+            val result = openFoodFacts.findByBarcode(barcode)
+            val food = result.getOrNull()
+            mutableState.update {
+                it.copy(
+                    externalSearching = false,
+                    externalResults = listOfNotNull(food),
+                    message = when {
+                        result.isFailure -> "照会に失敗しました。通信状態を確認してください。"
+                        food == null -> "この商品はデータベースに見つかりませんでした。手入力で記録できます。"
+                        else -> "「${food.displayName}」が見つかりました。内容を確認して記録してください。"
+                    },
+                )
+            }
+        }
+    }
+
+    fun clearExternalResults() {
+        mutableState.update { it.copy(externalResults = emptyList()) }
+    }
+
+    /** 外部検索結果を確認済みの数量(g)で記録する。ビタミン・ミネラルも換算して保存。 */
+    fun addExternalFood(slot: MealSlot, food: ExternalFood, grams: Double) {
+        if (grams <= 0) return
+        val ratio = grams / 100.0
+        val current = mutableState.value
+        viewModelScope.launch {
+            runCatching {
+                val entry = foods.addEntry(
+                    date = current.today,
+                    mealSlot = slot,
+                    foodName = food.displayName.take(40),
+                    amount = grams,
+                    amountUnit = "g",
+                    calories = food.caloriesPer100g * ratio,
+                    proteinGrams = food.proteinPer100g * ratio,
+                    fatGrams = food.fatPer100g * ratio,
+                    carbsGrams = food.carbsPer100g * ratio,
+                    vitaminCMg = food.vitaminCMgPer100g * ratio,
+                    calciumMg = food.calciumMgPer100g * ratio,
+                    ironMg = food.ironMgPer100g * ratio,
+                )
+                if (!current.demoMode && current.permissionsGranted) {
+                    health.writeNutrition(entry)
+                }
+            }.onFailure {
+                mutableState.update { state -> state.copy(message = "記録を保存できませんでした") }
+            }
+            mutableState.update { it.copy(externalResults = emptyList()) }
+            refresh()
+        }
+    }
+
+    /** 複数の食品を1つのレシピ(自作食品)として保存する。栄養は合計値で記録する。 */
+    fun saveRecipe(name: String, parts: List<Pair<FoodCatalogItem, Double>>) {
+        if (name.isBlank() || parts.isEmpty()) {
+            mutableState.update { it.copy(message = "レシピ名と材料を入力してください") }
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                val scaled = parts.map { (item, amount) -> item.scaledTo(amount) }
+                foods.saveCustomFood(
+                    name = name,
+                    standardAmount = 1.0,
+                    amountUnit = "食",
+                    calories = scaled.sumOf { it.calories },
+                    proteinGrams = scaled.sumOf { it.proteinGrams },
+                    fatGrams = scaled.sumOf { it.fatGrams },
+                    carbsGrams = scaled.sumOf { it.carbsGrams },
+                )
+            }.onFailure {
+                mutableState.update { state -> state.copy(message = "レシピを保存できませんでした") }
+                return@launch
+            }
+            mutableState.update { it.copy(message = "レシピ「$name」を自作食品として保存しました") }
+            refresh()
+        }
     }
 
     private var dialogueSeedBump = 0

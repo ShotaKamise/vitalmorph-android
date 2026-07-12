@@ -25,6 +25,10 @@ data class FoodEntry(
     val proteinGrams: Double,
     val fatGrams: Double,
     val carbsGrams: Double,
+    /** 代表的なビタミン・ミネラル(v0.9)。不明な場合は0のまま。 */
+    val vitaminCMg: Double = 0.0,
+    val calciumMg: Double = 0.0,
+    val ironMg: Double = 0.0,
     /** Health Connectとの対応付けID。作成時にUUIDで確定し変更しない。 */
     val clientRecordId: String,
     val createdAt: Long,
@@ -92,6 +96,12 @@ enum class NutritionSource(val label: String, val description: String) {
     SELECT_PER_DAY("日ごとに選択", "日ごとに優先元を選ぶ(今後提供)"),
 }
 
+/** 「日ごとに選択」モードでの、その日の優先元。 */
+enum class DayNutritionChoice(val label: String) {
+    VITALMORPH("VitaMorph"),
+    ASKEN("あすけん等"),
+}
+
 /**
  * VitaMorphのローカル記録と、Health Connect上の他アプリ(あすけん等)の記録を
  * 優先元ルールで解決する。合算はしない。
@@ -101,11 +111,16 @@ object NutritionResolver {
         mode: NutritionSource,
         vitamorph: DayNutrition?,
         external: DayNutrition?,
+        dayChoice: DayNutritionChoice? = null,
     ): DayNutrition? = when (mode) {
         NutritionSource.VITALMORPH_FIRST -> vitamorph ?: external
         NutritionSource.ASKEN_FIRST -> external ?: vitamorph
-        // 日ごと選択のUI提供までは、記録した側を尊重するVITALMORPH_FIRSTと同じ挙動。
-        NutritionSource.SELECT_PER_DAY -> vitamorph ?: external
+        NutritionSource.SELECT_PER_DAY -> when (dayChoice) {
+            DayNutritionChoice.ASKEN -> external ?: vitamorph
+            DayNutritionChoice.VITALMORPH -> vitamorph ?: external
+            // 未選択の日は記録した側を尊重する。
+            null -> vitamorph ?: external
+        }
     }
 
     /**
@@ -119,6 +134,7 @@ object NutritionResolver {
         mode: NutritionSource,
         start: LocalDate,
         endInclusive: LocalDate,
+        dayChoices: Map<LocalDate, DayNutritionChoice> = emptyMap(),
     ): List<DailyHealthData> {
         val baseByDate = baseDays.associateBy { it.date }
         val days = mutableListOf<DailyHealthData>()
@@ -129,7 +145,7 @@ object NutritionResolver {
             val external = if (base.hasNutrition) {
                 DayNutrition(base.calories, base.proteinGrams, base.fatGrams, base.carbsGrams)
             } else null
-            val resolved = resolveDay(mode, local, external)
+            val resolved = resolveDay(mode, local, external, dayChoices[date])
             days += base.copy(
                 calories = resolved?.calories ?: 0.0,
                 proteinGrams = resolved?.proteinGrams ?: 0.0,
