@@ -15,6 +15,7 @@ import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
+import app.vitalmorph.domain.SexAssigner
 import app.vitalmorph.domain.TournamentResult
 import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TrainerProgress
@@ -90,11 +91,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 else -> emptyList()
             }
-            val evolution = if (stored.onboardingComplete) {
-                EvolutionEngine.evaluate(rawDays, stored.goals, stored.seasonStart, today)
-            } else null
+            // 性別・機嫌・絆が進化ルートへ影響するため、世代を先に確定してから進化を評価する。
             val generation = if (stored.onboardingComplete) {
                 runCatching { profiles.ensureCurrentGeneration(stored) }.getOrNull()
+            } else null
+            val evolution = if (stored.onboardingComplete) {
+                EvolutionEngine.evaluate(
+                    rawDays,
+                    stored.goals,
+                    stored.seasonStart,
+                    today,
+                    sex = generation?.sex ?: SexAssigner.deterministicFor(stored.seasonStart),
+                    mood = generation?.mood ?: MonsterGeneration.DEFAULT_MOOD,
+                    bond = generation?.bond ?: MonsterGeneration.DEFAULT_BOND,
+                )
             } else null
             val trainerName = runCatching { profiles.trainerProfile()?.name }.getOrNull()
             val legacyStats = runCatching { profiles.legacyStats() }.getOrDefault(LegacyStats())
