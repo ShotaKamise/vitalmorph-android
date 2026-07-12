@@ -1,7 +1,7 @@
 # VitaMorph Claude Code Instructions
 
-このリポジトリでは、Claude Codeはゲームロジック、データ保存、Health Connect、食事管理、交流機能、ミニゲーム、画面統合を担当する。
-モンスターデザイン、画像生成、画像アセット、キャラクターアニメーション内部実装はCodex担当である。
+このリポジトリでは、Claude Codeが全実装を担当する(2026-07-12ユーザー決定。旧Codex担当分を引き取り)。
+残作業は `docs/COMPLETION_PLAN.md` で管理する。新規画像アセットの生成は行わず、既存画像の範囲で実装する。
 
 ## 作業開始時に読むもの
 
@@ -16,24 +16,15 @@
 
 ## Claudeの担当範囲
 
-- `app/src/main/java/app/vitalmorph/domain/**`
-- `app/src/main/java/app/vitalmorph/data/**`
-- `app/src/main/java/app/vitalmorph/ui/**` のうち、下記のCodex専有ファイルを除く部分
-- `app/src/test/**`
-- Room、Health Connect、食事記録、会話、機嫌、絆、ミニゲーム、バトル、世代継承
-- 必要なAndroidリソース。ただしモンスター画像は除く
+- リポジトリ全体(2026-07-12より。`MonsterArtwork.kt` のモーション実装、ロスター文書の構成記述を含む)
+- Room、Health Connect、食事記録、会話、機嫌、絆、ミニゲーム、バトル、世代継承、図鑑
 
-## Codex専有範囲
+## アセットに関する不変ルール(旧Codex契約から継続)
 
-次のファイルは、ユーザーから明示的な許可がない限り変更・削除・再生成しない。
-
-- `art/**`
-- `app/src/main/res/drawable-nodpi/monster_*`
-- `app/src/main/java/app/vitalmorph/ui/MonsterArtwork.kt`
-- `docs/MONSTER_ROSTER.md` の承認済みキャラクター名、ID、外見仕様
-- `docs/MONSTER_ASSET_CONTRACT.md` の公開API仕様
-
-Claudeは `MonsterVisual`、`MonsterSprite`、`MonsterMotion` の公開APIを呼び出して画面へ統合できる。必要なモーションが存在しない場合は、勝手に代替アニメーションを実装せず、`docs/HANDOFF_STATUS.md` の「Codexへの依頼」に追記する。
+- 公開済み `formId` はセーブデータキーであり、変更・削除・改名しない。
+- 既存モンスター画像(`art/**`、`app/src/main/res/drawable-nodpi/monster_*`)の上書き・削除・色変換をしない(図鑑のシルエット表示など描画時の演出は可)。
+- `docs/MONSTER_ROSTER.md` に存在しないキャラクターIDをセーブデータへ保存しない。
+- キャラクター名・外見仕様の変更はユーザー確認を経る。
 
 ## 開発ルール
 
@@ -51,7 +42,7 @@ Claudeは `MonsterVisual`、`MonsterSprite`、`MonsterMotion` の公開APIを呼
 
 ## 推奨ワークフロー
 
-- Claude用ブランチ `claude/core-implementation` で作業する。
+- `main` 上で直接作業し、マイルストーンごとに検証してプッシュする(2026-07-12ユーザー決定)。
 - マイルストーン単位で小さくコミットする。
 - 作業前後に `git status` と差分を確認する。
 - 完了時は変更内容、テスト結果、未解決事項を `docs/HANDOFF_STATUS.md` に反映する。
