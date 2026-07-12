@@ -26,6 +26,28 @@ object SexAssigner {
 }
 
 /**
+ * 孵化時・移行時のルート適性(人型/動物)決定(v0.10)。
+ */
+object RouteAssigner {
+    /** 既存データ移行用の固定ソルト。変更すると移行結果が変わるため変更禁止。 */
+    private const val MIGRATION_SALT = "vitalmorph-route-v1"
+
+    /**
+     * v0.10移行前から進行中の世代は、それまで人型ルート(旧仕様の第3週=人型)で
+     * 進化していたため、HUMANOIDへ固定して姿が変わらないようにする。
+     * 新規開始の初回移行では決定的に求める。
+     */
+    fun deterministicFor(seasonStart: LocalDate): EvolutionRoute {
+        val hash = "$MIGRATION_SALT:$seasonStart".hashCode()
+        return if (hash and 1 == 0) EvolutionRoute.HUMANOID else EvolutionRoute.BEAST
+    }
+
+    /** 新しい孵化時に約50%で決定する。結果は必ず永続化し、再抽選しない。 */
+    fun randomHatch(random: Random = Random.Default): EvolutionRoute =
+        if (random.nextBoolean()) EvolutionRoute.HUMANOID else EvolutionRoute.BEAST
+}
+
+/**
  * 現在世代をどう扱うかの決定。
  */
 sealed interface GenerationPlan {
@@ -68,39 +90,50 @@ object GenerationPlanner {
                 return GenerationPlan.Keep(currentGeneration)
             }
             // seasonStartが変わっているのに世代が開いたままの場合の安全策。
-            // 旧世代を閉じ、新しい孵化としてランダムに性別を決める。
+            // 旧世代を閉じ、新しい孵化としてランダムに性別・ルートを決める。
             return GenerationPlan.CloseAndCreate(
                 toClose = currentGeneration.copy(seasonEnd = seasonStart),
                 create = newGeneration(
                     generationNumber = completedSeasons + 1,
                     sex = SexAssigner.randomHatch(random),
+                    route = RouteAssigner.randomHatch(random),
                     seasonStart = seasonStart,
                 ),
             )
         }
 
-        val sex = if (hasAnyGenerationHistory) {
+        val sex: MonsterSex
+        val route: EvolutionRoute
+        if (hasAnyGenerationHistory) {
             // 過去世代があるのに現在世代がない = シーズン完了直後の新しい孵化。
-            SexAssigner.randomHatch(random)
+            sex = SexAssigner.randomHatch(random)
+            route = RouteAssigner.randomHatch(random)
         } else {
             // 履歴が空 = 既存SharedPreferencesユーザーの初回移行、または新規開始。
             // 保存済みseasonStartから一度だけ決定的に求める(DATA_MODEL.mdの移行規約)。
-            SexAssigner.deterministicFor(seasonStart)
+            sex = SexAssigner.deterministicFor(seasonStart)
+            route = RouteAssigner.deterministicFor(seasonStart)
         }
         return GenerationPlan.Create(
             newGeneration(
                 generationNumber = completedSeasons + 1,
                 sex = sex,
+                route = route,
                 seasonStart = seasonStart,
             ),
         )
     }
 
-    private fun newGeneration(generationNumber: Int, sex: MonsterSex, seasonStart: LocalDate) =
-        MonsterGeneration(
-            generationNumber = generationNumber,
-            sex = sex,
-            seasonStart = seasonStart,
-            seasonEnd = null,
-        )
+    private fun newGeneration(
+        generationNumber: Int,
+        sex: MonsterSex,
+        route: EvolutionRoute,
+        seasonStart: LocalDate,
+    ) = MonsterGeneration(
+        generationNumber = generationNumber,
+        sex = sex,
+        route = route,
+        seasonStart = seasonStart,
+        seasonEnd = null,
+    )
 }

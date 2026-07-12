@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CustomFoodEntity::class,
         FoodFavoriteEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class VitaMorphDatabase : RoomDatabase() {
@@ -95,6 +95,17 @@ abstract class VitaMorphDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v6: 世代へ進化ルート適性(人型/動物)の列を追加。
+         * 既存の進行中世代は旧仕様(第3週=人型)で進化していたため、HUMANOIDを既定にして
+         * アップデートで姿が変わらないようにする。
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `route` TEXT NOT NULL DEFAULT 'HUMANOID'")
+            }
+        }
+
         @Volatile
         private var instance: VitaMorphDatabase? = null
 
@@ -105,7 +116,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
                     VitaMorphDatabase::class.java,
                     DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { instance = it }
             }

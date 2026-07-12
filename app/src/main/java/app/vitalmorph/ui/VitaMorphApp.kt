@@ -68,6 +68,7 @@ import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.EvolutionRoute
 import app.vitalmorph.domain.FoodCatalog
 import app.vitalmorph.domain.FoodCatalogItem
 import app.vitalmorph.domain.FoodEntry
@@ -364,7 +365,7 @@ private fun MainGameScreen(
                     onSetTodayChoice = onSetTodayNutritionChoice,
                     onSaveRecipe = onSaveRecipe,
                 )
-                AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
+                AppTab.EVOLUTION -> EvolutionScreen(state.evolution, state.generation?.route)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
                 AppTab.TRAINER -> TrainerScreen(state)
                 AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset, onSetTrainerName, onSetNutritionSource)
@@ -647,7 +648,7 @@ private fun MetricCard(title: String, value: String, subtitle: String, modifier:
 }
 
 @Composable
-private fun EvolutionScreen(evolution: EvolutionResult?) {
+private fun EvolutionScreen(evolution: EvolutionResult?, route: EvolutionRoute?) {
     if (evolution == null) return
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -656,7 +657,21 @@ private fun EvolutionScreen(evolution: EvolutionResult?) {
     ) {
         item {
             SectionTitle("現在の進化経路")
-            Text("第1週の生活で系統、第2週の傾向で職業、第3週の記録と機嫌・絆で最終形態が決まります。")
+            route?.let {
+                Text(
+                    "この子の適性: ${it.label}(孵化時に決まり、この世代では変わりません)",
+                    color = Gold,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                when (route) {
+                    EvolutionRoute.BEAST ->
+                        "第1週の生活で系統が決まり、動物のまま成熟します。第3週の記録で最終形態が分岐します。"
+                    else ->
+                        "第1週の生活で系統、第2週の傾向で職業、第3週の記録と機嫌・絆で最終形態が決まります。"
+                },
+            )
         }
         items(evolution.path) { form ->
             ElevatedCard {

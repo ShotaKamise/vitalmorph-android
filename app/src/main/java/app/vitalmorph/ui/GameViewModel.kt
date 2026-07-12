@@ -21,6 +21,7 @@ import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.DayNutritionChoice
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.EvolutionRoute
 import app.vitalmorph.domain.FoodCatalogItem
 import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.InteractionEngine
@@ -187,6 +188,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     sex = generation?.sex ?: SexAssigner.deterministicFor(stored.seasonStart),
                     mood = generation?.mood ?: MonsterGeneration.DEFAULT_MOOD,
                     bond = generation?.bond ?: MonsterGeneration.DEFAULT_BOND,
+                    route = generation?.route ?: EvolutionRoute.HUMANOID,
                 )
             } else null
             val trainerName = runCatching { profiles.trainerProfile()?.name }.getOrNull()

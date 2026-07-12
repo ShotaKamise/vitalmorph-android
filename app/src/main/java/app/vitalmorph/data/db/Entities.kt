@@ -2,6 +2,7 @@ package app.vitalmorph.data.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import app.vitalmorph.domain.EvolutionRoute
 import app.vitalmorph.domain.FoodCatalogItem
 import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.InteractionState
@@ -31,6 +32,7 @@ data class MonsterGenerationEntity(
     @PrimaryKey(autoGenerate = true) val generationId: Long = 0,
     val generationNumber: Int,
     val sex: String,
+    val route: String = EvolutionRoute.HUMANOID.name,
     val seasonStart: String,
     val seasonEnd: String?,
     val mood: Int,
@@ -46,6 +48,7 @@ data class MonsterGenerationEntity(
         generationId = generationId,
         generationNumber = generationNumber,
         sex = MonsterSex.valueOf(sex),
+        route = runCatching { EvolutionRoute.valueOf(route) }.getOrDefault(EvolutionRoute.HUMANOID),
         seasonStart = LocalDate.parse(seasonStart),
         seasonEnd = seasonEnd?.let(LocalDate::parse),
         mood = MonsterGeneration.clampMood(mood),
@@ -63,6 +66,7 @@ data class MonsterGenerationEntity(
             generationId = generation.generationId,
             generationNumber = generation.generationNumber,
             sex = generation.sex.name,
+            route = generation.route.name,
             seasonStart = generation.seasonStart.toString(),
             seasonEnd = generation.seasonEnd?.toString(),
             mood = MonsterGeneration.clampMood(generation.mood),

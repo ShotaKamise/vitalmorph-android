@@ -42,13 +42,24 @@ object TrainerNameRules {
 }
 
 /**
- * 28日シーズンごとの1世代。性別は孵化時に決定し、同じ世代では変更しない。
+ * 進化ルートの適性。孵化時に約50%で抽選し、同じ世代では変更しない(v0.10)。
+ * - HUMANOID: 第3週から人型7職業へ進む
+ * - BEAST: 動物のまま成熟し、系統固有の最終形態へ進む
+ */
+enum class EvolutionRoute(val label: String) {
+    HUMANOID("人型ルート"),
+    BEAST("動物ルート"),
+}
+
+/**
+ * 28日シーズンごとの1世代。性別とルート適性は孵化時に決定し、同じ世代では変更しない。
  * シーズン完了時に最終形態・大会順位・継承内容を記録し、系譜画面で表示する。
  */
 data class MonsterGeneration(
     val generationId: Long = 0,
     val generationNumber: Int,
     val sex: MonsterSex,
+    val route: EvolutionRoute = EvolutionRoute.HUMANOID,
     val seasonStart: LocalDate,
     val seasonEnd: LocalDate? = null,
     val mood: Int = DEFAULT_MOOD,

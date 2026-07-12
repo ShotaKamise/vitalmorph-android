@@ -115,7 +115,7 @@ object EvolutionEngine {
     ) = MonsterForm(firstId, firstName, MonsterStage.FINAL, family, firstRole, firstDescription, firstAccent) to
         MonsterForm(secondId, secondName, MonsterStage.FINAL, family, secondRole, secondDescription, secondAccent)
 
-    // 新43枠構成(docs/MONSTER_ROSTER.md)で最終形態として使う動物系6体。
+    // 人型ルートの第4週で分岐先になる動物系6体(ロスターのヒントと一致)。
     // オス: アステリオン、バスティオンレックス、ゼファリオン
     // メス: ミラフローラ、ルナヴェルデ、フェニクレスト
     private val astelion = finalsByIntermediate.getValue(solfeon.id).first
@@ -124,6 +124,70 @@ object EvolutionEngine {
     private val zephyrion = finalsByIntermediate.getValue(velox.id).first
     private val lunaVerde = finalsByIntermediate.getValue(moonMoss.id).first
     private val phoenixCrest = finalsByIntermediate.getValue(crackRun.id).second
+
+    // 動物ルート(v0.10)の性別割り振り: 各系統の成熟体2体を♂/♀へ1体ずつ。
+    // 最終形態は親成熟体の性別を継承する(2026-07-12ユーザー承認)。
+    private val maleIntermediates: Map<MonsterFamily, MonsterForm> = mapOf(
+        MonsterFamily.BALANCE to solfeon,
+        MonsterFamily.POWER to grandguard,
+        MonsterFamily.SPEED to velox,
+        MonsterFamily.STORAGE to bulkDome,
+        MonsterFamily.REST to driftMark,
+        MonsterFamily.OVERDRIVE to igniDash,
+    )
+    private val femaleIntermediates: Map<MonsterFamily, MonsterForm> = mapOf(
+        MonsterFamily.BALANCE to aquanel,
+        MonsterFamily.POWER to fangrage,
+        MonsterFamily.SPEED to skyRush,
+        MonsterFamily.STORAGE to emberPot,
+        MonsterFamily.REST to moonMoss,
+        MonsterFamily.OVERDRIVE to crackRun,
+    )
+
+    /** 動物系フォームの性別割り振り。共通(モルフィ・成長体6体)は含まない。図鑑・検証用。 */
+    val animalFormSex: Map<String, MonsterSex> = buildMap {
+        maleIntermediates.values.forEach { intermediate ->
+            put(intermediate.id, MonsterSex.MALE)
+            finalsByIntermediate.getValue(intermediate.id).let {
+                put(it.first.id, MonsterSex.MALE)
+                put(it.second.id, MonsterSex.MALE)
+            }
+        }
+        femaleIntermediates.values.forEach { intermediate ->
+            put(intermediate.id, MonsterSex.FEMALE)
+            finalsByIntermediate.getValue(intermediate.id).let {
+                put(it.first.id, MonsterSex.FEMALE)
+                put(it.second.id, MonsterSex.FEMALE)
+            }
+        }
+    }
+
+    /** 動物ルートの第3週: 系統と性別で成熟体が決まる。 */
+    fun beastIntermediateFor(family: MonsterFamily, sex: MonsterSex): MonsterForm = when (sex) {
+        MonsterSex.MALE -> maleIntermediates.getValue(family)
+        MonsterSex.FEMALE -> femaleIntermediates.getValue(family)
+    }
+
+    /** 動物ルートの第4週: 成熟体ごとの2候補から第3週の生活で選ぶ。 */
+    fun chooseBeastFinal(intermediate: MonsterForm, m: EvolutionMetrics): MonsterForm {
+        val candidates = finalsByIntermediate.getValue(intermediate.id)
+        val chooseFirst = when (intermediate.id) {
+            solfeon.id -> m.nutritionScore >= 80 && m.consistencyScore >= 80
+            aquanel.id -> m.restDays >= 2 && m.nutritionScore >= 75
+            grandguard.id -> m.strengthDays >= 3 && m.consistencyScore >= 70
+            fangrage.id -> m.calorieRatio >= 0.90
+            velox.id -> m.stepGoalDays >= 6
+            skyRush.id -> m.highActivityDays >= 3
+            bulkDome.id -> m.activityScore < 70
+            emberPot.id -> m.carbsRatio >= m.fatRatio
+            moonMoss.id -> m.activityTrend <= 0.15
+            driftMark.id -> m.weekdayWeekendVariance >= 0.25
+            igniDash.id -> m.calorieRatio >= 0.90 && m.activityScore >= 110
+            crackRun.id -> m.calorieTrend <= 0.10 && m.calorieRatio < 0.90
+            else -> true
+        }
+        return if (chooseFirst) candidates.first else candidates.second
+    }
 
     /**
      * 図鑑・検証用の全形態カタログ。承認済みIDのみを含み、公開済みIDは削除しない。
@@ -139,11 +203,15 @@ object EvolutionEngine {
             HumanoidRoster.all
 
     /**
-     * 新進化表(Phase 2)の評価。
+     * 71体構成の進化表(v0.10)の評価。
      * - 第1週: 共通幼生(モルフィ)
-     * - 第2週: 生活傾向による動物系成長体6種(性別差分画像は制作中のため共通画像+♂/♀表示)
-     * - 第3週: 第2週の傾向から人型7職業の成熟体(性別別ID)
-     * - 第4週: 第3週の生活・機嫌・絆で同職業の上位人型、または動物系最終形態
+     * - 第2週: 生活傾向による動物系成長体6種(共通画像+♂/♀表示)
+     * - 第3週: 孵化時に抽選したルート適性で分岐
+     *   - 人型ルート: 第2週の傾向から7職業の成熟体(性別別ID)
+     *   - 動物ルート: 系統×性別の動物成熟体
+     * - 第4週:
+     *   - 人型ルート: 第3週の生活・機嫌・絆で上位人型、または動物系最終形態6体
+     *   - 動物ルート: 成熟体ごとの2候補から第3週の生活で選ぶ
      */
     fun evaluate(
         allDays: List<DailyHealthData>,
@@ -153,6 +221,7 @@ object EvolutionEngine {
         sex: MonsterSex,
         mood: Int = MonsterGeneration.DEFAULT_MOOD,
         bond: Int = MonsterGeneration.DEFAULT_BOND,
+        route: EvolutionRoute = EvolutionRoute.HUMANOID,
     ): EvolutionResult {
         val seasonDay = (ChronoUnit.DAYS.between(seasonStart, today).toInt() + 1).coerceIn(1, 28)
         val sorted = allDays.filter { !it.date.isBefore(seasonStart) && !it.date.isAfter(today) }.sortedBy { it.date }
@@ -161,19 +230,32 @@ object EvolutionEngine {
         }
         val week1 = window(1..7)
         val week2 = window(8..14).ifEmpty { week1 }
-        // 第4週の分岐は仕様どおり第3週の記録で判定する。第3週が無記録なら継続性0となり
-        // 動物系最終形態(罰ではない完成ルート)へ向かう。
+        // 第4週の分岐は仕様どおり第3週の記録で判定する。
         val week3 = window(15..21)
 
         val family = chooseFamily(metrics(week1, goals))
-        val job = chooseJob(family, metrics(week2, goals))
-        val mature = HumanoidRoster.mature(job, sex)
         val finalDecisionMetrics = metrics(week3, goals)
-        val humanoidFinal = HumanoidRoster.finalForm(job, sex)
-        val animalFinal = animalFinalFor(job.family, sex)
-        val towardHumanoid = choosesHumanoidFinal(finalDecisionMetrics, mood, bond)
-        val final = if (towardHumanoid) humanoidFinal else animalFinal
-        val candidates = if (towardHumanoid) listOf(humanoidFinal, animalFinal) else listOf(animalFinal, humanoidFinal)
+
+        val mature: MonsterForm
+        val final: MonsterForm
+        val candidates: List<MonsterForm>
+        when (route) {
+            EvolutionRoute.HUMANOID -> {
+                val job = chooseJob(family, metrics(week2, goals))
+                mature = HumanoidRoster.mature(job, sex)
+                val humanoidFinal = HumanoidRoster.finalForm(job, sex)
+                val animalFinal = animalFinalFor(job.family, sex)
+                val towardHumanoid = choosesHumanoidFinal(finalDecisionMetrics, mood, bond)
+                final = if (towardHumanoid) humanoidFinal else animalFinal
+                candidates = if (towardHumanoid) listOf(humanoidFinal, animalFinal) else listOf(animalFinal, humanoidFinal)
+            }
+            EvolutionRoute.BEAST -> {
+                mature = beastIntermediateFor(family.family, sex)
+                val pair = finalsByIntermediate.getValue(mature.id)
+                final = chooseBeastFinal(mature, finalDecisionMetrics)
+                candidates = if (final == pair.first) listOf(pair.first, pair.second) else listOf(pair.second, pair.first)
+            }
+        }
 
         return when (seasonDay) {
             in 1..7 -> EvolutionResult(seasonDay, baby, listOf(baby), listOf(), metrics(sorted, goals), 8)
