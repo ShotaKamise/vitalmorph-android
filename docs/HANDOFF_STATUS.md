@@ -12,7 +12,7 @@
 - T4 図鑑: 完了(Room v8)。全71体の図鑑をトレーナータブに追加。出会った姿を発見済みとして永続化、系譜から遡及取り込み。
 - T5 レシピ材料の個別保存: 完了(Room v9)。材料付きでレシピを保存・閲覧・削除し、1タップで記録可能。
 - T6 ドキュメント整備とロスター更新: 実施中。ロスターを71体構成へ更新、READMEを現機能へ更新、本書を整理。
-- T7 v1.0.0リリース準備: 未着手。versionName/versionCodeのバンプとタグ公開手順の案内。
+- T7 v1.0.0リリース準備: 完了。versionCode 12 / versionName 1.0.0。署名済みAPKの公開はタグ(例: v1.0.0)をプッシュするとGitHub Actionsのreleaseワークフローが実行される(署名シークレットが必要なためタグ付けはユーザー操作)。
 
 ## 現在の完成範囲
 
@@ -60,8 +60,8 @@
 ## 現在のバージョン
 
 - applicationId: `app.vitalmorph`
-- versionCode: `11`
-- versionName: `0.10.0`
+- versionCode: `12`
+- versionName: `1.0.0`
 - minSdk: `28`
 - targetSdk / compileSdk: `36`
 - Room: `2.8.4`(KSP `2.3.9`、スキーマは `app/schemas/` へ出力、DBバージョン6)
