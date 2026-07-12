@@ -142,6 +142,12 @@ fun VitaMorphApp(
                     onFinish = viewModel::finishMiniGame,
                     onCancel = viewModel::cancelMiniGame,
                 )
+                state.showHatchAnimation && state.evolution != null -> HatchOverlay(
+                    // 生まれたばかりなので幼生(モルフィ)を表示する。演出はseasonDay<=7でのみ再生される。
+                    form = state.evolution!!.path.first(),
+                    sex = state.generation?.sex,
+                    onDone = viewModel::onHatchAnimationDone,
+                )
                 else -> MainGameScreen(
                     state = state,
                     snackbar = snackbar,

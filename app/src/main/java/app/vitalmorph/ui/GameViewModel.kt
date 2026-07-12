@@ -86,6 +86,7 @@ data class GameUiState(
     val miniGameCelebration: Boolean = false,
     val activeMiniGame: MiniGameKind? = null,
     val miniGameSeed: Int = 0,
+    val showHatchAnimation: Boolean = false,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -192,10 +193,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 currentBattle
             }
+            // 孵化演出(U4): この世代でまだ演出を出していない場合のみ判定する。
+            // シーズン序盤(幼生の週=7日目まで)のみ卵の孵化を再生し、途中更新の既存ユーザーには
+            // 「卵が最終形態に孵る」不自然を避けるため、演出せず「表示済み」として記録する。
+            val hatchPending = generation != null && generation.generationId != store.hatchShownGenerationId()
+            val showHatch = hatchPending && evolution != null && evolution.seasonDay <= 7
+            if (hatchPending && generation != null && !showHatch) {
+                // シーズン途中の既存世代は静かに既読化して、今後演出が出ないようにする。
+                store.setHatchShownGenerationId(generation.generationId)
+            }
             mutableState.update {
                 it.copy(
                     loading = false,
                     battle = restoredBattle,
+                    showHatchAnimation = showHatch,
                     onboardingComplete = stored.onboardingComplete,
                     goals = stored.goals,
                     seasonStart = stored.seasonStart,
@@ -453,6 +464,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** ミニゲーム成功時の祝福モーションを一定時間後に解除する。 */
     fun clearMiniGameCelebration() {
         mutableState.update { it.copy(miniGameCelebration = false) }
+    }
+
+    /** 孵化演出を見終えたら、この世代を既読化してオーバーレイを閉じる。 */
+    fun onHatchAnimationDone() {
+        mutableState.value.generation?.let { store.setHatchShownGenerationId(it.generationId) }
+        mutableState.update { it.copy(showHatchAnimation = false) }
     }
 
     fun useBattleMove(moveId: String) {

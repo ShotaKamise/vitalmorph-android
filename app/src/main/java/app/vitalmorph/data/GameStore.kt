@@ -71,6 +71,16 @@ class GameStore(context: Context) {
     /** 保存済みの進行中大会状態のJSON。無ければnull。 */
     fun battleState(): String? = preferences.getString("battle_state", null)
 
+    /**
+     * 孵化アニメーションを再生済みの世代ID。まだ再生していなければ-1。
+     * 世代が生まれた最初の表示(オンボーディング直後・新シーズン孵化)で一度だけ演出を出すために使う。
+     */
+    fun hatchShownGenerationId(): Long = preferences.getLong("hatch_shown_generation", -1L)
+
+    fun setHatchShownGenerationId(id: Long) {
+        preferences.edit().putLong("hatch_shown_generation", id).apply()
+    }
+
     fun setTodayWorkoutTag(date: LocalDate, tag: WorkoutTag) {
         val json = JSONObject(preferences.getString("workout_tags", "{}") ?: "{}")
         json.put(date.toString(), tag.name)
