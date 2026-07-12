@@ -1,5 +1,6 @@
 package app.vitalmorph.data
 
+import app.vitalmorph.data.db.DiscoveredFormEntity
 import app.vitalmorph.data.db.InteractionStateEntity
 import app.vitalmorph.data.db.LegacyStatsEntity
 import app.vitalmorph.data.db.MonsterGenerationEntity
@@ -134,12 +135,30 @@ class ProfileRepository(
         database.legacyStatsDao().upsert(LegacyStatsEntity.fromDomain(safe))
     }
 
+    /** 図鑑(v0.11)で発見済みのフォームID一覧を返す。 */
+    suspend fun discoveredFormIds(): Set<String> =
+        database.discoveredFormDao().all().map { it.formId }.toSet()
+
+    /**
+     * フォームの発見を記録する。既に発見済みのIDはIGNORE挿入で初回記録を残す。
+     * firstSeenAtは現在時刻。空リストは何もしない。
+     */
+    suspend fun recordDiscoveries(formIds: List<String>, generationNumber: Int) {
+        if (formIds.isEmpty()) return
+        val timestamp = now()
+        val entities = formIds.distinct().map { id ->
+            DiscoveredFormEntity(formId = id, firstSeenAt = timestamp, generationNumber = generationNumber)
+        }
+        database.discoveredFormDao().insertAll(entities)
+    }
+
     /** すべてのRoomデータを削除する。SharedPreferencesの初期化とあわせて使う。 */
     suspend fun clearAll() {
         database.trainerProfileDao().clear()
         database.monsterGenerationDao().clear()
         database.legacyStatsDao().clear()
         database.interactionStateDao().clear()
+        database.discoveredFormDao().clear()
     }
 
     private suspend fun insert(generation: MonsterGeneration): MonsterGeneration {

@@ -147,6 +147,23 @@ Data Originが異なるNutritionRecordを推測だけで重複排除しない。
 - 保存: 各バトル操作後。消去(null): 大会終了(優勝・敗退)・シーズン完了・全リセット時。
 - 全フィールドを保存し、往復でデータクラスの等価性を保つ。
 
+## DiscoveredForm(図鑑、v0.11)
+
+v0.11で `discovered_form` テーブルとして確定(DBバージョン8、COMPLETION_PLAN T4)。
+出会った(その姿になった)フォームを1件ずつ記録し、図鑑の発見済み判定に使う。
+
+```
+formId            主キー。MonsterForm.id(例: morphy / astelion / valeria_f)
+firstSeenAt       初回発見時刻(epoch millis)
+generationNumber  発見時の世代番号(遡及取り込みは過去世代の番号)
+```
+
+- DAOはIGNORE挿入で、初回発見だけを残す(再発見しても上書きしない)。
+- `refresh` で現在の進化経路(`evolution.path`)をその世代番号で記録する。
+- 遡及取り込み: 既存ユーザーの系譜(過去世代の `finalFormId`)を古い世代から順に取り込み、初回起動時に自動で図鑑を埋める。
+- 全リセット時に他テーブルとあわせてクリアする。
+- 表示順は純ロジック `DexCatalog` が決める(共通7体→人型28体→動物36体、♂→♀)。全71体が対象。
+
 ## 既存データ移行
 
 現在の `GameStore` から次を保持する。

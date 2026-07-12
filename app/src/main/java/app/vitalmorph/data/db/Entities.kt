@@ -223,6 +223,17 @@ data class InteractionStateEntity(
     }
 }
 
+/**
+ * 図鑑(v0.11 / COMPLETION_PLAN T4)。出会った(その形態になった)フォームを1件ずつ記録する。
+ * 初回発見だけを残すため、DAOはIGNORE挿入で上書きしない。
+ */
+@Entity(tableName = "discovered_form")
+data class DiscoveredFormEntity(
+    @PrimaryKey val formId: String,
+    val firstSeenAt: Long,
+    val generationNumber: Int,
+)
+
 @Entity(tableName = "legacy_stats")
 data class LegacyStatsEntity(
     @PrimaryKey val id: Int = SINGLETON_ID,

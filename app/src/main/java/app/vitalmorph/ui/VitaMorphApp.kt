@@ -1,5 +1,6 @@
 package app.vitalmorph.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -51,9 +52,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -64,6 +69,7 @@ import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
 import app.vitalmorph.data.ExternalFood
 import app.vitalmorph.domain.DayNutritionChoice
+import app.vitalmorph.domain.DexCatalog
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
@@ -987,6 +993,84 @@ private fun TrainerScreen(state: GameUiState) {
                 GenerationCard(generation)
             }
         }
+        item {
+            val discoveredCount = DexCatalog.sections.sumOf { section ->
+                section.forms.count { it.id in state.discoveredFormIds }
+            }
+            SectionTitle("図鑑")
+            Text("$discoveredCount / ${DexCatalog.totalForms} 発見")
+            Text(
+                "出会った(その姿になった)パートナーが記録されます。未発見はシルエットで表示されます。",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.7f),
+            )
+        }
+        items(DexCatalog.sections) { section ->
+            DexSection(section, state.discoveredFormIds)
+        }
+    }
+}
+
+@Composable
+private fun DexSection(section: DexCatalog.Section, discovered: Set<String>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(section.title, fontWeight = FontWeight.Bold, color = Mint)
+        section.forms.chunked(4).forEach { rowForms ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowForms.forEach { form ->
+                    Box(Modifier.weight(1f)) {
+                        DexCell(form, discovered = form.id in discovered)
+                    }
+                }
+                // 端数を空セルで埋めてセル幅を揃える。
+                repeat(4 - rowForms.size) { Box(Modifier.weight(1f)) {} }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DexCell(form: MonsterForm, discovered: Boolean) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (discovered) {
+            MonsterVisual(form, Modifier.size(64.dp), showAura = false)
+            val mark = DexCatalog.sexMark(form.id)
+            Text(
+                if (mark != null) "${form.name} $mark" else form.name,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+        } else {
+            MonsterSilhouette(form.id, Modifier.size(64.dp))
+            Text(
+                "???",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+        }
+    }
+}
+
+/** 未発見フォームの黒塗りシルエット。MonsterArtworkは変更せず、画像へColorFilterを掛けて描く。 */
+@Composable
+private fun MonsterSilhouette(formId: String, modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Image(
+            painter = painterResource(MonsterArtwork.resourceFor(formId)),
+            contentDescription = "未発見",
+            contentScale = ContentScale.Fit,
+            colorFilter = ColorFilter.tint(Color.Black),
+            modifier = Modifier.fillMaxSize().padding(4.dp),
+        )
     }
 }
 

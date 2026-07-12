@@ -100,6 +100,18 @@ interface InteractionStateDao {
 }
 
 @Dao
+interface DiscoveredFormDao {
+    @Query("SELECT * FROM discovered_form")
+    suspend fun all(): List<DiscoveredFormEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(entities: List<DiscoveredFormEntity>)
+
+    @Query("DELETE FROM discovered_form")
+    suspend fun clear()
+}
+
+@Dao
 interface LegacyStatsDao {
     @Query("SELECT * FROM legacy_stats WHERE id = ${LegacyStatsEntity.SINGLETON_ID}")
     suspend fun get(): LegacyStatsEntity?

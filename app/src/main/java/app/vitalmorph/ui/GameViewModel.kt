@@ -87,6 +87,7 @@ data class GameUiState(
     val trainerName: String? = null,
     val generation: MonsterGeneration? = null,
     val pastGenerations: List<MonsterGeneration> = emptyList(),
+    val discoveredFormIds: Set<String> = emptySet(),
     val legacyStats: LegacyStats = LegacyStats(),
     val interaction: InteractionState = InteractionState(),
     val dialogue: DialogueLine? = null,
@@ -199,6 +200,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val pastGenerations = runCatching {
                 profiles.allGenerations().filter { it.seasonEnd != null }.sortedByDescending { it.generationNumber }
             }.getOrDefault(emptyList())
+            // 図鑑(T4): 現在の進化経路と、過去世代の最終形態を発見済みとして記録・取得する。
+            // 記録に失敗しても育成表示は止めない(空集合で続行)。
+            val discoveredFormIds = runCatching {
+                // 遡及取り込み: 古い世代から順に入れ、同じ形態は初回発見(=最古世代)を残す。
+                pastGenerations
+                    .mapNotNull { g -> g.finalFormId?.let { it to g.generationNumber } }
+                    .sortedBy { it.second }
+                    .forEach { (id, gen) -> profiles.recordDiscoveries(listOf(id), gen) }
+                if (evolution != null) {
+                    profiles.recordDiscoveries(evolution.path.map { it.id }, generation?.generationNumber ?: 0)
+                }
+                profiles.discoveredFormIds()
+            }.getOrDefault(emptySet())
             val foodEntriesToday = runCatching { foods.entriesOn(today) }.getOrDefault(emptyList())
             val customFoods = runCatching { foods.customFoods() }.getOrDefault(emptyList())
             val favoriteFoodIds = runCatching { foods.favoriteIds() }.getOrDefault(emptySet())
@@ -236,6 +250,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     trainerName = trainerName,
                     generation = generation,
                     pastGenerations = pastGenerations,
+                    discoveredFormIds = discoveredFormIds,
                     legacyStats = legacyStats,
                     interaction = interaction,
                     dialogue = dialogue,

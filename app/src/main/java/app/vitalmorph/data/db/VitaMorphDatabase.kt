@@ -16,8 +16,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FoodEntryEntity::class,
         CustomFoodEntity::class,
         FoodFavoriteEntity::class,
+        DiscoveredFormEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class VitaMorphDatabase : RoomDatabase() {
@@ -28,6 +29,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
     abstract fun foodEntryDao(): FoodEntryDao
     abstract fun customFoodDao(): CustomFoodDao
     abstract fun foodFavoriteDao(): FoodFavoriteDao
+    abstract fun discoveredFormDao(): DiscoveredFormDao
 
     companion object {
         private const val DATABASE_NAME = "vitalmorph.db"
@@ -118,6 +120,21 @@ abstract class VitaMorphDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v8: 図鑑用の発見済みフォーム表を追加(COMPLETION_PLAN T4)。既存テーブルは変更しない。
+         * refreshで現在フォームと過去世代の最終形態を遡及取り込みするため、初回起動で自動的に埋まる。
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `discovered_form` (" +
+                        "`formId` TEXT PRIMARY KEY NOT NULL, " +
+                        "`firstSeenAt` INTEGER NOT NULL, " +
+                        "`generationNumber` INTEGER NOT NULL)",
+                )
+            }
+        }
+
         @Volatile
         private var instance: VitaMorphDatabase? = null
 
@@ -128,7 +145,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
                     VitaMorphDatabase::class.java,
                     DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .build()
                     .also { instance = it }
             }
