@@ -32,4 +32,16 @@ class MonsterArtworkCoverageTest {
         }
         assertTrue(HumanoidRoster.all.size == 28)
     }
+
+    @Test
+    fun `expression resource names follow the asset contract`() {
+        assertTrue(
+            MonsterArtwork.expressionResourceName("morphy", MonsterExpression.HAPPY) ==
+                "monster_morphy_happy",
+        )
+        assertTrue(
+            MonsterArtwork.expressionResourceName("leafang", MonsterExpression.CONFIDENT) ==
+                "monster_leafang_confident",
+        )
+    }
 }

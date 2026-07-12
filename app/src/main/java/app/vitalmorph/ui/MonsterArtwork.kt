@@ -47,12 +47,18 @@ enum class MonsterMotion {
     GUARD_STANCE,
 }
 
-/**
- * キャラ本体の表情差分。現状はCodexによる表情画像が未制作のため、
- * 参照は必ずフォールバック(通常画像)へ解決される。画像が入り次第、
- * MonsterArtwork.expressionResources へ登録するだけで自動的に使われる。
- */
-enum class MonsterExpression { NORMAL, HAPPY, SAD }
+enum class MonsterExpression(val suffix: String?) {
+    NORMAL(null),
+    HAPPY("happy"),
+    ANGRY("angry"),
+    SAD("sad"),
+    EXCITED("excited"),
+    SURPRISED("surprised"),
+    SHY("shy"),
+    TIRED("tired"),
+    CONFIDENT("confident"),
+    HURT("hurt"),
+}
 
 object MonsterArtwork {
     private val resources = mapOf(
@@ -138,27 +144,20 @@ object MonsterArtwork {
         R.drawable.monster_serenadia,
     )
 
-    /**
-     * 表情差分の画像リソース。キーは "<formId>_happy" / "<formId>_sad"。
-     * 現状は画像が未制作のため空。Codexへ: 画像追加時は
-     * drawable-nodpi/monster_<formId>_<expression>.webp を置き、このマップへ登録する。
-     */
-    private val expressionResources: Map<String, Int> = emptyMap()
-
     fun resourceFor(formId: String): Int = resources[formId] ?: R.drawable.monster_morphy
 
+    fun expressionResourceName(formId: String, expression: MonsterExpression): String =
+        expression.suffix?.let { "monster_${formId}_$it" } ?: "monster_$formId"
+
     /**
-     * 表情差分を考慮した画像リソースを返す。該当する表情画像が無い場合(現状は常に)、
-     * 通常画像へフォールバックする。expression==NORMAL も通常画像。
+     * 表情差分画像が存在すれば使い、存在しなければ通常画像へ戻す。
+     * drawable-nodpi/monster_<formId>_<expression>.webp を追加すると、R.drawable名から自動で解決される。
      */
     fun resourceFor(formId: String, expression: MonsterExpression): Int {
         if (expression == MonsterExpression.NORMAL) return resourceFor(formId)
-        val suffix = when (expression) {
-            MonsterExpression.HAPPY -> "happy"
-            MonsterExpression.SAD -> "sad"
-            MonsterExpression.NORMAL -> return resourceFor(formId)
-        }
-        return expressionResources["${formId}_$suffix"] ?: resourceFor(formId)
+        return runCatching {
+            R.drawable::class.java.getField(expressionResourceName(formId, expression)).getInt(null)
+        }.getOrDefault(resourceFor(formId))
     }
 
     fun resourceForOpponent(name: String): Int = cpuFinals[Math.floorMod(name.hashCode(), cpuFinals.size)]

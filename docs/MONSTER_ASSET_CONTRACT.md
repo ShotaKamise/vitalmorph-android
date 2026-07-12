@@ -65,6 +65,20 @@ MonsterSprite(
 - 画像内へキャラクター名やUI文字を描き込まない
 - `contentDescription` は画面側で設定する
 
+## 表情差分仕様
+
+表情差分は任意アセットとして扱う。存在する場合のみ自動で利用し、存在しないフォームや表情は通常画像 `monster_<stable_form_id>.webp` へフォールバックする。
+
+- 保存先: `app/src/main/res/drawable-nodpi/`
+- 命名: `monster_<stable_form_id>_<expression>.webp`
+- 形式: 透過WebP、512 x 512、四隅透明
+- 対応表情: `happy` / `angry` / `sad` / `excited` / `surprised` / `shy` / `tired` / `confident` / `hurt`
+- `neutral` は差分画像を作らず、通常画像を使う
+- 生成スクリプト: `art/tools/generate_expression_variants.py`
+- 一覧プレビュー: `art/expression-roster-preview.png`
+
+初期対応として、Issue #9推奨の共通7体(`morphy`, `leafang`, `galvol`, `rapizel`, `motchigrow`, `mossleep`, `runpact`)に9表情、合計63枚を制作済み。全71体へ広げる場合も同じ命名規則を使い、アプリコードの追加変更なしで利用できる。
+
 ## 制作済み人型アセット
 
 - 男性人型14体、成人女性人型14体の計28体を制作済み

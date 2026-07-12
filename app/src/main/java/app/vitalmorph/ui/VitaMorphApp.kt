@@ -524,10 +524,15 @@ private fun MonsterHero(
         talking -> Emote.HAPPY_NOTE
         else -> null
     }
-    // 表情差分(画像が入るまでは通常画像へフォールバック): 喜びタッチ中はHAPPY、機嫌BAD帯はSAD。
+    // 表情差分がある共通7体では専用画像へ切り替わり、未制作フォームでは通常画像へ戻る。
     val expression = when {
         touchReaction == TouchReactionType.HAPPY -> MonsterExpression.HAPPY
-        mood != null && MoodEngine.moodBand(mood) == app.vitalmorph.domain.MoodBand.BAD -> MonsterExpression.SAD
+        touchReaction == TouchReactionType.SHY -> MonsterExpression.SHY
+        touchReaction == TouchReactionType.ANNOYED -> MonsterExpression.ANGRY
+        miniGameCelebration -> MonsterExpression.EXCITED
+        talking -> MonsterExpression.CONFIDENT
+        mood != null && mood <= 19 -> MonsterExpression.SAD
+        mood != null && mood >= 80 -> MonsterExpression.HAPPY
         else -> MonsterExpression.NORMAL
     }
     ElevatedCard(
