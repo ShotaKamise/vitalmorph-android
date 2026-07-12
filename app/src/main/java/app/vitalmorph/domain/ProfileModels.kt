@@ -52,6 +52,19 @@ enum class EvolutionRoute(val label: String) {
 }
 
 /**
+ * 性格(v0.11)。孵化時に5種から抽選し、同じ世代では変更しない。
+ * 能力差・バトル補正は一切付けない(規約: 能力差を付けない)。
+ * 影響するのは会話のトーンと、連続タッチの許容回数のみ。
+ */
+enum class Personality(val label: String) {
+    HARDWORKER("がんばりや"),
+    EASYGOING("のんびり"),
+    COOL("クール"),
+    AFFECTIONATE("あまえんぼう"),
+    CAPRICIOUS("きまぐれ"),
+}
+
+/**
  * 28日シーズンごとの1世代。性別とルート適性は孵化時に決定し、同じ世代では変更しない。
  * シーズン完了時に最終形態・大会順位・継承内容を記録し、系譜画面で表示する。
  */
@@ -60,6 +73,7 @@ data class MonsterGeneration(
     val generationNumber: Int,
     val sex: MonsterSex,
     val route: EvolutionRoute = EvolutionRoute.HUMANOID,
+    val personality: Personality = Personality.HARDWORKER,
     val seasonStart: LocalDate,
     val seasonEnd: LocalDate? = null,
     val mood: Int = DEFAULT_MOOD,

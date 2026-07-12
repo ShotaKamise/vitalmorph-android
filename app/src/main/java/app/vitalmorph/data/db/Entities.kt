@@ -10,6 +10,7 @@ import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MonsterSex
+import app.vitalmorph.domain.Personality
 import app.vitalmorph.domain.TrainerProfile
 import java.time.LocalDate
 
@@ -33,6 +34,7 @@ data class MonsterGenerationEntity(
     val generationNumber: Int,
     val sex: String,
     val route: String = EvolutionRoute.HUMANOID.name,
+    val personality: String = Personality.HARDWORKER.name,
     val seasonStart: String,
     val seasonEnd: String?,
     val mood: Int,
@@ -49,6 +51,7 @@ data class MonsterGenerationEntity(
         generationNumber = generationNumber,
         sex = MonsterSex.valueOf(sex),
         route = runCatching { EvolutionRoute.valueOf(route) }.getOrDefault(EvolutionRoute.HUMANOID),
+        personality = runCatching { Personality.valueOf(personality) }.getOrDefault(Personality.HARDWORKER),
         seasonStart = LocalDate.parse(seasonStart),
         seasonEnd = seasonEnd?.let(LocalDate::parse),
         mood = MonsterGeneration.clampMood(mood),
@@ -67,6 +70,7 @@ data class MonsterGenerationEntity(
             generationNumber = generation.generationNumber,
             sex = generation.sex.name,
             route = generation.route.name,
+            personality = generation.personality.name,
             seasonStart = generation.seasonStart.toString(),
             seasonEnd = generation.seasonEnd?.toString(),
             mood = MonsterGeneration.clampMood(generation.mood),

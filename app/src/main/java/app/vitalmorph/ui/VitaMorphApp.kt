@@ -81,6 +81,7 @@ import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterForm
 import app.vitalmorph.domain.MonsterSex
 import app.vitalmorph.domain.MonsterStage
+import app.vitalmorph.domain.Personality
 import app.vitalmorph.domain.MoodEngine
 import app.vitalmorph.domain.TouchArea
 import app.vitalmorph.domain.TouchReactionType
@@ -402,6 +403,7 @@ private fun HomeScreen(
             MonsterHero(
                 evolution = evolution,
                 sex = state.generation?.sex,
+                personality = state.generation?.personality,
                 mood = state.generation?.mood,
                 bond = state.generation?.bond,
                 touchReaction = state.touchReaction,
@@ -494,6 +496,7 @@ private fun HomeScreen(
 private fun MonsterHero(
     evolution: EvolutionResult,
     sex: MonsterSex? = null,
+    personality: Personality? = null,
     mood: Int? = null,
     bond: Int? = null,
     touchReaction: TouchReactionType? = null,
@@ -568,6 +571,13 @@ private fun MonsterHero(
                         color = if (it == MonsterSex.MALE) Mint else Gold,
                     )
                 }
+            }
+            personality?.let {
+                Text(
+                    "せいかく: ${it.label}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                )
             }
             Text(evolution.form.role, color = Gold)
             Text(evolution.form.description, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
@@ -1020,6 +1030,11 @@ private fun GenerationCard(generation: MonsterGeneration) {
                     )
                 }
                 Text(form?.name ?: "記録なし", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "せいかく: ${generation.personality.label}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                )
                 Text(
                     when (generation.finalPlacement) {
                         1 -> "大会: 優勝"

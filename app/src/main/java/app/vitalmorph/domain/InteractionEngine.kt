@@ -63,6 +63,16 @@ object InteractionEngine {
     const val RAPID_TOUCH_LIMIT = 6
 
     /**
+     * 性格ごとの連続タッチ許容回数(v0.11)。能力差はなく、ふれあいの手触りだけを変える。
+     * あまえんぼうは構われるのが好きで+2、クールはしつこいのが苦手で-2、その他は既定。
+     */
+    fun rapidTouchLimitFor(personality: Personality): Int = RAPID_TOUCH_LIMIT + when (personality) {
+        Personality.AFFECTIONATE -> 2
+        Personality.COOL -> -2
+        else -> 0
+    }
+
+    /**
      * 日付が変わっていれば1日ごとの回数をリセットする。
      * 端末時刻が過去に戻った場合(today < lastDailyResetDate)はリセットしない。
      */
@@ -83,6 +93,7 @@ object InteractionEngine {
         today: LocalDate,
         area: TouchArea,
         mood: Int,
+        personality: Personality = Personality.HARDWORKER,
     ): TouchResult {
         val fresh = resetIfNewDay(state, today)
         val sinceLast = now - fresh.lastInteractionAt
@@ -97,7 +108,7 @@ object InteractionEngine {
         }
         val updated = fresh.copy(lastInteractionAt = now, consecutiveTouches = consecutive)
 
-        if (consecutive > RAPID_TOUCH_LIMIT) {
+        if (consecutive > rapidTouchLimitFor(personality)) {
             // しつこいタッチ。機嫌は下がるが、報酬上限とは無関係に1回だけ小さく下げる。
             return TouchResult(
                 reaction = TouchReactionType.ANNOYED,

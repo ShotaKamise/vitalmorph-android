@@ -50,6 +50,44 @@ class InteractionEngineTest {
         assertEquals(TouchReactionType.ANNOYED, lastReaction)
     }
 
+    /** 指定した性格で連続タッチをくり返し、初めてANNOYEDになるまでのタッチ回数を返す。 */
+    private fun touchesUntilAnnoyed(personality: Personality): Int {
+        var state = InteractionState()
+        var time = baseTime
+        var count = 0
+        repeat(50) {
+            count++
+            val result = InteractionEngine.onTouch(
+                state, time, today, TouchArea.HEAD, mood = 70, personality = personality,
+            )
+            state = result.state
+            if (result.reaction == TouchReactionType.ANNOYED) return count
+            time += InteractionEngine.TOUCH_COOLDOWN_MS + 1
+        }
+        return -1
+    }
+
+    @Test
+    fun `affectionate tolerates exactly two more rapid touches than default`() {
+        val default = touchesUntilAnnoyed(Personality.HARDWORKER)
+        val affectionate = touchesUntilAnnoyed(Personality.AFFECTIONATE)
+        assertEquals(default + 2, affectionate)
+    }
+
+    @Test
+    fun `cool tolerates exactly two fewer rapid touches than default`() {
+        val default = touchesUntilAnnoyed(Personality.HARDWORKER)
+        val cool = touchesUntilAnnoyed(Personality.COOL)
+        assertEquals(default - 2, cool)
+    }
+
+    @Test
+    fun `rapid touch limit shifts by personality`() {
+        assertEquals(InteractionEngine.RAPID_TOUCH_LIMIT + 2, InteractionEngine.rapidTouchLimitFor(Personality.AFFECTIONATE))
+        assertEquals(InteractionEngine.RAPID_TOUCH_LIMIT - 2, InteractionEngine.rapidTouchLimitFor(Personality.COOL))
+        assertEquals(InteractionEngine.RAPID_TOUCH_LIMIT, InteractionEngine.rapidTouchLimitFor(Personality.HARDWORKER))
+    }
+
     @Test
     fun `calm pause resets consecutive counter`() {
         var state = InteractionState()

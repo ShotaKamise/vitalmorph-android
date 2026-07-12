@@ -103,6 +103,72 @@ class GenerationPlannerTest {
     }
 
     @Test
+    fun `deterministic personality is stable across repeated calls`() {
+        val first = PersonalityAssigner.deterministicFor(seasonStart)
+        repeat(100) {
+            assertEquals(first, PersonalityAssigner.deterministicFor(seasonStart))
+        }
+    }
+
+    @Test
+    fun `random hatch covers all five personalities`() {
+        val results = (0 until 500).map { seed ->
+            PersonalityAssigner.randomHatch(Random(seed))
+        }.toSet()
+        assertEquals(Personality.entries.toSet(), results)
+    }
+
+    @Test
+    fun `created generation carries a personality`() {
+        val plan = GenerationPlanner.plan(
+            currentGeneration = null,
+            hasAnyGenerationHistory = false,
+            seasonStart = seasonStart,
+            completedSeasons = 0,
+            random = Random(3),
+        )
+        assertTrue(plan is GenerationPlan.Create)
+        val created = (plan as GenerationPlan.Create).create
+        assertEquals(PersonalityAssigner.deterministicFor(seasonStart), created.personality)
+    }
+
+    @Test
+    fun `keep path preserves existing personality`() {
+        val existing = MonsterGeneration(
+            generationId = 7,
+            generationNumber = 3,
+            sex = MonsterSex.FEMALE,
+            personality = Personality.CAPRICIOUS,
+            seasonStart = seasonStart,
+        )
+        val plan = GenerationPlanner.plan(
+            currentGeneration = existing,
+            hasAnyGenerationHistory = true,
+            seasonStart = seasonStart,
+            completedSeasons = 2,
+            random = Random(5),
+        )
+        assertTrue(plan is GenerationPlan.Keep)
+        assertEquals(Personality.CAPRICIOUS, (plan as GenerationPlan.Keep).generation.personality)
+    }
+
+    @Test
+    fun `new hatch after completed season uses random personality`() {
+        val newStart = seasonStart.plusDays(28)
+        val results = (0 until 500).map { seed ->
+            val plan = GenerationPlanner.plan(
+                currentGeneration = null,
+                hasAnyGenerationHistory = true,
+                seasonStart = newStart,
+                completedSeasons = 1,
+                random = Random(seed),
+            ) as GenerationPlan.Create
+            plan.create.personality
+        }.toSet()
+        assertEquals(Personality.entries.toSet(), results)
+    }
+
+    @Test
     fun `stale open generation is closed before creating the next one`() {
         val stale = MonsterGeneration(
             generationId = 3,

@@ -282,6 +282,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             today = current.today,
             area = area,
             mood = generation.mood,
+            personality = generation.personality,
         )
         if (result.reaction == TouchReactionType.NONE) return
         val updated = MoodEngine.applyDelta(generation, result.moodDelta, result.bondDelta)
@@ -595,6 +596,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             stepGoal = goals.dailySteps,
             exerciseMinutesToday = todayData?.exerciseMinutes ?: 0,
             lastTournamentWon = mutableState.value.tournament?.let { it.placement == 1 },
+            personality = generation.personality,
         )
         val seed = (today.toEpochDay() + timeOfDay.ordinal * 7 + dialogueSeedBump).toInt()
         return DialogueEngine.greeting(context, seed)

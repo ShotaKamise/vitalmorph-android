@@ -34,6 +34,7 @@ data class DialogueContext(
     val stepGoal: Int = 0,
     val exerciseMinutesToday: Long = 0,
     val lastTournamentWon: Boolean? = null,
+    val personality: Personality = Personality.HARDWORKER,
 )
 
 /** 会話の選択肢。選ぶと機嫌・絆が変化する(1日の反映上限あり)。 */
@@ -114,7 +115,37 @@ object DialogueEngine {
         if (context.seasonDay >= 22 && context.stage == MonsterStage.FINAL) {
             lines += "この姿になれたのは $NAME のおかげ。残りの日々も楽しもうね。"
         }
+        // 性格ごとの追加セリフ。この世代の性格ぶんだけを足す(能力差はなく口調のみ変わる)。
+        lines += personalityLines(context.personality)
         return lines
+    }
+
+    /**
+     * 性格に応じた追加セリフ。責めない・命令しない・医療的断定をしない文体を守る。
+     * トーン: がんばりや=前向きで熱血、のんびり=ゆったり癒し系、クール=そっけないが根は優しい、
+     * あまえんぼう=甘えた口調で構ってほしがる、きまぐれ=気分屋で予測不能。
+     */
+    private fun personalityLines(personality: Personality): List<String> = when (personality) {
+        Personality.HARDWORKER -> listOf(
+            "$NAME、今日もいっしょに一歩ずつ前へ進もう!ぼく、やる気まんたんだよ!",
+            "よーし、$NAME と一緒ならなんだってがんばれる気がする!",
+        )
+        Personality.EASYGOING -> listOf(
+            "$NAME、今日ものんびりいこうね。焦らなくて大丈夫だよ〜。",
+            "ふわぁ…$NAME のそばはあったかくて、つい和んじゃうなあ。",
+        )
+        Personality.COOL -> listOf(
+            "$NAME か。…別に、待ってたわけじゃないけど。まあ、来てくれてよかった。",
+            "ふん、$NAME。無理はするなよ。…ぼくが見ててやるからさ。",
+        )
+        Personality.AFFECTIONATE -> listOf(
+            "$NAME〜!会いたかったよぉ。ねえねえ、もっとかまって?",
+            "えへへ、$NAME のとなりが一番だいすき。ずっといっしょにいたいな。",
+        )
+        Personality.CAPRICIOUS -> listOf(
+            "$NAME、今日はなんだか…そうだ、こっちで遊ぼう!あ、やっぱりあっちがいいかも!",
+            "きまぐれなぼくだけど、$NAME のことは…まあ、気に入ってるんだよね、今のところ。",
+        )
     }
 
     private fun choicesFor(context: DialogueContext): List<DialogueChoice> =

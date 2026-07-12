@@ -23,6 +23,8 @@ v0.7で確定した列(DBバージョン3)。stage・currentHp・battleStats・e
 generationId
 generationNumber
 sex               MALE / FEMALE
+route             HUMANOID / BEAST(v0.10追加)
+personality       HARDWORKER / EASYGOING / COOL / AFFECTIONATE / CAPRICIOUS(v0.11追加)
 seasonStart
 seasonEnd          進行中はnull
 mood               0から100
@@ -35,7 +37,9 @@ awardedDefense
 awardedSpeed
 ```
 
-性別は孵化時に決定し、同じ `generationId` では変更しない。次世代で再抽選する。
+性別・ルート・性格は孵化時に決定し、同じ `generationId` では変更しない。次世代で再抽選する。
+性格(v0.11)は会話トーンと連続タッチ許容回数だけに影響し、能力差・バトル補正は付けない。
+既存の進行中世代はv7マイグレーションでHARDWORKER(がんばりや)が既定になる。
 
 ## LegacyStats
 

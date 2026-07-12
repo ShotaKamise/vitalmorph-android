@@ -70,6 +70,33 @@ class DialogueEngineTest {
     }
 
     @Test
+    fun `each personality yields a line unique to it and never leaks name placeholder`() {
+        // 性格ごとに、その性格でしか現れない語り口が出ることを確認する。
+        val markers = mapOf(
+            Personality.HARDWORKER to "やる気まんたん",
+            Personality.EASYGOING to "のんびりいこう",
+            Personality.COOL to "無理はするなよ",
+            Personality.AFFECTIONATE to "会いたかった",
+            Personality.CAPRICIOUS to "きまぐれ",
+        )
+        val textsByPersonality = Personality.entries.associateWith { personality ->
+            (0..60).map { seed -> DialogueEngine.greeting(base.copy(personality = personality), seed).text }
+        }
+        for ((personality, texts) in textsByPersonality) {
+            // {name} が残っていないこと。
+            assertTrue(texts.none { it.contains("{name}") })
+            val marker = markers.getValue(personality)
+            // この性格ではマーカーが出る。
+            assertTrue("marker=$marker", texts.any { it.contains(marker) })
+            // 他の性格ではそのマーカーが出ない(その性格固有であること)。
+            for ((other, otherTexts) in textsByPersonality) {
+                if (other == personality) continue
+                assertFalse("$marker leaked into $other", otherTexts.any { it.contains(marker) })
+            }
+        }
+    }
+
+    @Test
     fun `time of day mapping covers all hours`() {
         assertEquals(TimeOfDay.MORNING, TimeOfDay.fromHour(5))
         assertEquals(TimeOfDay.MORNING, TimeOfDay.fromHour(10))

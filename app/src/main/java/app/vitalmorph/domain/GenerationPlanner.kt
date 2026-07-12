@@ -48,6 +48,30 @@ object RouteAssigner {
 }
 
 /**
+ * 孵化時・移行時の性格決定(v0.11)。
+ * 性格は能力差を持たず、会話トーンと連続タッチ許容回数のみに影響する。
+ */
+object PersonalityAssigner {
+    /** 既存データ移行用の固定ソルト。変更すると移行結果が変わるため変更禁止。 */
+    private const val MIGRATION_SALT = "vitalmorph-personality-v1"
+
+    private val ENTRIES = Personality.entries
+
+    /**
+     * v0.11移行前から進行中の世代へ一度だけ適用する決定的な性格。
+     * 保存済みseasonStartと固定ソルトから求めるため、何度呼んでも同じ結果になる。
+     */
+    fun deterministicFor(seasonStart: LocalDate): Personality {
+        val hash = "$MIGRATION_SALT:$seasonStart".hashCode()
+        return ENTRIES[Math.floorMod(hash, ENTRIES.size)]
+    }
+
+    /** 新しい孵化時に5種から均等に抽選する。結果は必ず永続化し、再抽選しない。 */
+    fun randomHatch(random: Random = Random.Default): Personality =
+        ENTRIES[random.nextInt(ENTRIES.size)]
+}
+
+/**
  * 現在世代をどう扱うかの決定。
  */
 sealed interface GenerationPlan {
@@ -97,6 +121,7 @@ object GenerationPlanner {
                     generationNumber = completedSeasons + 1,
                     sex = SexAssigner.randomHatch(random),
                     route = RouteAssigner.randomHatch(random),
+                    personality = PersonalityAssigner.randomHatch(random),
                     seasonStart = seasonStart,
                 ),
             )
@@ -104,21 +129,25 @@ object GenerationPlanner {
 
         val sex: MonsterSex
         val route: EvolutionRoute
+        val personality: Personality
         if (hasAnyGenerationHistory) {
             // 過去世代があるのに現在世代がない = シーズン完了直後の新しい孵化。
             sex = SexAssigner.randomHatch(random)
             route = RouteAssigner.randomHatch(random)
+            personality = PersonalityAssigner.randomHatch(random)
         } else {
             // 履歴が空 = 既存SharedPreferencesユーザーの初回移行、または新規開始。
             // 保存済みseasonStartから一度だけ決定的に求める(DATA_MODEL.mdの移行規約)。
             sex = SexAssigner.deterministicFor(seasonStart)
             route = RouteAssigner.deterministicFor(seasonStart)
+            personality = PersonalityAssigner.deterministicFor(seasonStart)
         }
         return GenerationPlan.Create(
             newGeneration(
                 generationNumber = completedSeasons + 1,
                 sex = sex,
                 route = route,
+                personality = personality,
                 seasonStart = seasonStart,
             ),
         )
@@ -128,11 +157,13 @@ object GenerationPlanner {
         generationNumber: Int,
         sex: MonsterSex,
         route: EvolutionRoute,
+        personality: Personality,
         seasonStart: LocalDate,
     ) = MonsterGeneration(
         generationNumber = generationNumber,
         sex = sex,
         route = route,
+        personality = personality,
         seasonStart = seasonStart,
         seasonEnd = null,
     )

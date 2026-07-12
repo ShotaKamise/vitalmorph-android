@@ -13,7 +13,7 @@
 
 ## タスク一覧
 
-### T1: タッチ・会話・ミニゲーム用モーション6種の実装 — [ ] 未着手
+### T1: タッチ・会話・ミニゲーム用モーション6種の実装 — [x] 完了(2026-07-12)
 
 旧Codex依頼分を引き取り。`MonsterMotion` へ `TOUCH_HAPPY` / `TOUCH_SHY` / `TOUCH_ANNOYED` / `TALK` / `SAD` / `MINIGAME_SUCCESS` を追加し、既存4種と同様の変形アニメーション(scale/translation/rotation/alphaのキーフレーム)として `MonsterArtwork.kt` に実装する。
 
