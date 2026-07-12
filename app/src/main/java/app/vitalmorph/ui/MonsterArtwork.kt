@@ -41,7 +41,18 @@ enum class MonsterMotion {
     TALK,
     SAD,
     MINIGAME_SUCCESS,
+    // バトル演出強化用モーション(2026-07-12 Claude実装 / docs/RELEASE_1_1_PLAN.md U11)。
+    // SPECIAL: 溜め(縮み)から前方へ強く踏み込む必殺・強打。GUARD_STANCE: わずかに沈んで構える防御。
+    SPECIAL,
+    GUARD_STANCE,
 }
+
+/**
+ * キャラ本体の表情差分。現状はCodexによる表情画像が未制作のため、
+ * 参照は必ずフォールバック(通常画像)へ解決される。画像が入り次第、
+ * MonsterArtwork.expressionResources へ登録するだけで自動的に使われる。
+ */
+enum class MonsterExpression { NORMAL, HAPPY, SAD }
 
 object MonsterArtwork {
     private val resources = mapOf(
@@ -127,7 +138,28 @@ object MonsterArtwork {
         R.drawable.monster_serenadia,
     )
 
+    /**
+     * 表情差分の画像リソース。キーは "<formId>_happy" / "<formId>_sad"。
+     * 現状は画像が未制作のため空。Codexへ: 画像追加時は
+     * drawable-nodpi/monster_<formId>_<expression>.webp を置き、このマップへ登録する。
+     */
+    private val expressionResources: Map<String, Int> = emptyMap()
+
     fun resourceFor(formId: String): Int = resources[formId] ?: R.drawable.monster_morphy
+
+    /**
+     * 表情差分を考慮した画像リソースを返す。該当する表情画像が無い場合(現状は常に)、
+     * 通常画像へフォールバックする。expression==NORMAL も通常画像。
+     */
+    fun resourceFor(formId: String, expression: MonsterExpression): Int {
+        if (expression == MonsterExpression.NORMAL) return resourceFor(formId)
+        val suffix = when (expression) {
+            MonsterExpression.HAPPY -> "happy"
+            MonsterExpression.SAD -> "sad"
+            MonsterExpression.NORMAL -> return resourceFor(formId)
+        }
+        return expressionResources["${formId}_$suffix"] ?: resourceFor(formId)
+    }
 
     fun resourceForOpponent(name: String): Int = cpuFinals[Math.floorMod(name.hashCode(), cpuFinals.size)]
 }
@@ -139,9 +171,10 @@ fun MonsterVisual(
     motion: MonsterMotion = MonsterMotion.IDLE,
     facingRight: Boolean = true,
     showAura: Boolean = true,
+    expression: MonsterExpression = MonsterExpression.NORMAL,
 ) {
     MonsterSprite(
-        drawableRes = MonsterArtwork.resourceFor(form.id),
+        drawableRes = MonsterArtwork.resourceFor(form.id, expression),
         contentDescription = form.name,
         accent = Color(form.accent),
         modifier = modifier,
@@ -204,11 +237,16 @@ fun MonsterSprite(
         MonsterMotion.TALK -> 0.99f + phase * 0.02f
         MonsterMotion.SAD -> 0.97f
         MonsterMotion.MINIGAME_SUCCESS -> 1f + action * 0.10f
+        // 溜め局面(action前半)で少し縮み、踏み込みで通常サイズへ戻す。
+        MonsterMotion.SPECIAL -> 0.92f + action * 0.14f
+        MonsterMotion.GUARD_STANCE -> 0.97f - phase * 0.01f
     }
     val translationX = when (motion) {
         MonsterMotion.ATTACK -> action * 34f * density
         MonsterMotion.HIT -> -action * 14f * density
         MonsterMotion.TOUCH_ANNOYED -> -4f * density - action * 6f * density
+        // 通常攻撃より強い前方への踏み込み。
+        MonsterMotion.SPECIAL -> action * 52f * density
         else -> 0f
     }
     val translationY = when (motion) {
@@ -218,6 +256,8 @@ fun MonsterSprite(
         MonsterMotion.TALK -> quickShake * 4f * density
         MonsterMotion.SAD -> baseBob * 0.4f + 8f * density
         MonsterMotion.MINIGAME_SUCCESS -> baseBob - action * 40f * density
+        // わずかに沈んで構える。揺れは最小限。
+        MonsterMotion.GUARD_STANCE -> baseBob * 0.3f + 4f * density
         else -> baseBob
     }
     val rotation = when (motion) {
@@ -231,6 +271,8 @@ fun MonsterSprite(
         MonsterMotion.TALK -> 3.5f + (phase - 0.5f) * 2f
         MonsterMotion.SAD -> -4f + (phase - 0.5f) * 1f
         MonsterMotion.MINIGAME_SUCCESS -> action * 25f
+        MonsterMotion.SPECIAL -> action * 12f
+        MonsterMotion.GUARD_STANCE -> (phase - 0.5f) * 1f
     }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {

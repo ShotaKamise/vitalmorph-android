@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.vitalmorph.domain.BATTLE_BURST_DAMAGE
 import app.vitalmorph.domain.BattleActor
 import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.BattleEventKind
@@ -514,6 +515,21 @@ private fun MonsterHero(
         mood != null && mood <= 19 -> MonsterMotion.SAD
         else -> MonsterMotion.IDLE
     }
+    // エモート: タッチ喜び/ミニゲーム成功→ハート、照れ/会話→♪、嫌がり→💢。
+    val emote = when {
+        touchReaction == TouchReactionType.HAPPY -> Emote.HEART
+        touchReaction == TouchReactionType.SHY -> Emote.HAPPY_NOTE
+        touchReaction == TouchReactionType.ANNOYED -> Emote.ANGRY
+        miniGameCelebration -> Emote.HEART
+        talking -> Emote.HAPPY_NOTE
+        else -> null
+    }
+    // 表情差分(画像が入るまでは通常画像へフォールバック): 喜びタッチ中はHAPPY、機嫌BAD帯はSAD。
+    val expression = when {
+        touchReaction == TouchReactionType.HAPPY -> MonsterExpression.HAPPY
+        mood != null && MoodEngine.moodBand(mood) == app.vitalmorph.domain.MoodBand.BAD -> MonsterExpression.SAD
+        else -> MonsterExpression.NORMAL
+    }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = Color(evolution.form.accent).copy(alpha = 0.12f)),
@@ -531,7 +547,8 @@ private fun MonsterHero(
                         }
                     },
             ) {
-                MonsterVisual(evolution.form, Modifier.fillMaxSize(), motion = motion)
+                MonsterVisual(evolution.form, Modifier.fillMaxSize(), motion = motion, expression = expression)
+                EmoteOverlay(emote, Modifier.fillMaxSize())
             }
             val reactionLabel = when (touchReaction) {
                 TouchReactionType.HAPPY -> "うれしそうにしている!"
@@ -925,6 +942,30 @@ private fun TurnBattleStage(
     displayedOpponentHp: Int,
     currentEvent: TurnEvent?,
 ) {
+    // バトル中のエモート(プレイヤー側): 被弾30以上→汗、勝利遷移→♪。一定時間で消す。
+    var playerEmote by remember { mutableStateOf<Emote?>(null) }
+    LaunchedEffect(currentEvent) {
+        val ev = currentEvent ?: return@LaunchedEffect
+        if (ev.kind == BattleEventKind.DAMAGE_DEALT) {
+            val playerIsTarget = if (ev.targetHpAfter >= 0) {
+                ev.actor == BattleActor.OPPONENT
+            } else {
+                ev.actor == BattleActor.PLAYER
+            }
+            if (playerIsTarget && ev.damage >= 30) {
+                playerEmote = Emote.SWEAT
+                delay(1_200)
+                playerEmote = null
+            }
+        }
+    }
+    LaunchedEffect(battle.outcome) {
+        if (battle.outcome == BattleOutcome.ROUND_WON || battle.outcome == BattleOutcome.TOURNAMENT_WON) {
+            playerEmote = Emote.HAPPY_NOTE
+            delay(1_200)
+            playerEmote = null
+        }
+    }
     ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(form.accent).copy(alpha = 0.10f))) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -947,7 +988,10 @@ private fun TurnBattleStage(
                         modifier = Modifier.fillMaxSize(),
                         motion = battleMotion(currentEvent, battle.outcome, playerSide = true),
                     )
+                    // 被弾側なら斬撃/閃光、ガード・回復の行動側なら盾/回復光を重ねる。
+                    BattleEffectOverlay(effectEventForSide(currentEvent, playerSide = true), Modifier.fillMaxSize())
                     BattleFloatingLabel(currentEvent, playerSide = true)
+                    EmoteOverlay(playerEmote, Modifier.fillMaxSize())
                 }
                 Text("VS", color = Gold, fontWeight = FontWeight.Black, fontSize = 20.sp)
                 Box(Modifier.weight(1f).height(150.dp), contentAlignment = Alignment.TopCenter) {
@@ -964,6 +1008,7 @@ private fun TurnBattleStage(
                         motion = battleMotion(currentEvent, battle.outcome, playerSide = false),
                         facingRight = false,
                     )
+                    BattleEffectOverlay(effectEventForSide(currentEvent, playerSide = false), Modifier.fillMaxSize())
                     BattleFloatingLabel(currentEvent, playerSide = false)
                 }
             }
@@ -1004,13 +1049,36 @@ private fun battleMotion(event: TurnEvent?, outcome: BattleOutcome, playerSide: 
             }
             when {
                 targetIsThisSide -> MonsterMotion.HIT
+                // 大ダメージ(40以上)は攻撃側を必殺モーションにする。
+                isActor && event.damage >= BATTLE_BURST_DAMAGE -> MonsterMotion.SPECIAL
                 isActor -> MonsterMotion.ATTACK
                 else -> MonsterMotion.IDLE
             }
         }
         BattleEventKind.HEAL -> if (isActor) MonsterMotion.VICTORY else MonsterMotion.IDLE
-        BattleEventKind.GUARD, BattleEventKind.ANNOUNCE -> MonsterMotion.IDLE
+        BattleEventKind.GUARD -> if (isActor) MonsterMotion.GUARD_STANCE else MonsterMotion.IDLE
+        BattleEventKind.ANNOUNCE -> MonsterMotion.IDLE
     }
+}
+
+/**
+ * 指定サイドにエフェクトを描くべきイベントを返す(該当しなければnull)。
+ * ダメージは被弾側、ガード・回復は行動側に重ねる。BattleEffectOverlayが種類を選ぶ。
+ */
+private fun effectEventForSide(event: TurnEvent?, playerSide: Boolean): TurnEvent? {
+    event ?: return null
+    val show = when (event.kind) {
+        BattleEventKind.DAMAGE_DEALT -> {
+            if (event.targetHpAfter >= 0) {
+                event.actor == BattleActor.OPPONENT && playerSide || event.actor == BattleActor.PLAYER && !playerSide
+            } else {
+                (event.actor == BattleActor.PLAYER) == playerSide
+            }
+        }
+        BattleEventKind.GUARD, BattleEventKind.HEAL -> (event.actor == BattleActor.PLAYER) == playerSide
+        else -> false
+    }
+    return if (show) event else null
 }
 
 /** ダメージ・回復・ガードの浮き出しラベル(対象サイドに表示)。 */
