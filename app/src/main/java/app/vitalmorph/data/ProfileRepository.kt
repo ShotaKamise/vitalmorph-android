@@ -1,11 +1,13 @@
 package app.vitalmorph.data
 
+import app.vitalmorph.data.db.InteractionStateEntity
 import app.vitalmorph.data.db.LegacyStatsEntity
 import app.vitalmorph.data.db.MonsterGenerationEntity
 import app.vitalmorph.data.db.TrainerProfileEntity
 import app.vitalmorph.data.db.VitaMorphDatabase
 import app.vitalmorph.domain.GenerationPlan
 import app.vitalmorph.domain.GenerationPlanner
+import app.vitalmorph.domain.InteractionState
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.TrainerNameRules
@@ -80,6 +82,20 @@ class ProfileRepository(
         }
     }
 
+    /**
+     * 世代の機嫌・絆を保存する。同じ世代のみ更新し、性別や開始日は変更しない。
+     */
+    suspend fun updateMoodBond(generation: MonsterGeneration) {
+        database.monsterGenerationDao().update(MonsterGenerationEntity.fromDomain(generation))
+    }
+
+    suspend fun interactionState(): InteractionState =
+        database.interactionStateDao().get()?.toDomain() ?: InteractionState()
+
+    suspend fun saveInteractionState(state: InteractionState) {
+        database.interactionStateDao().upsert(InteractionStateEntity.fromDomain(state))
+    }
+
     suspend fun legacyStats(): LegacyStats =
         database.legacyStatsDao().get()?.toDomain() ?: LegacyStats()
 
@@ -101,6 +117,7 @@ class ProfileRepository(
         database.trainerProfileDao().clear()
         database.monsterGenerationDao().clear()
         database.legacyStatsDao().clear()
+        database.interactionStateDao().clear()
     }
 
     private suspend fun insert(generation: MonsterGeneration): MonsterGeneration {

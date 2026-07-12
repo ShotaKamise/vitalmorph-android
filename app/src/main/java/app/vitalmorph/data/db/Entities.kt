@@ -2,6 +2,7 @@ package app.vitalmorph.data.db
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import app.vitalmorph.domain.InteractionState
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MonsterSex
@@ -51,6 +52,40 @@ data class MonsterGenerationEntity(
             seasonEnd = generation.seasonEnd?.toString(),
             mood = MonsterGeneration.clampMood(generation.mood),
             bond = MonsterGeneration.clampBond(generation.bond),
+        )
+    }
+}
+
+@Entity(tableName = "interaction_state")
+data class InteractionStateEntity(
+    @PrimaryKey val id: Int = SINGLETON_ID,
+    val lastInteractionAt: Long,
+    val consecutiveTouches: Int,
+    val touchRewardCountToday: Int,
+    val conversationCountToday: Int,
+    val miniGameRewardCountToday: Int,
+    val lastDailyResetDate: String?,
+) {
+    fun toDomain() = InteractionState(
+        lastInteractionAt = lastInteractionAt,
+        consecutiveTouches = consecutiveTouches,
+        touchRewardCountToday = touchRewardCountToday,
+        conversationCountToday = conversationCountToday,
+        miniGameRewardCountToday = miniGameRewardCountToday,
+        lastDailyResetDate = lastDailyResetDate?.let(LocalDate::parse),
+    )
+
+    companion object {
+        const val SINGLETON_ID = 1
+
+        fun fromDomain(state: InteractionState) = InteractionStateEntity(
+            id = SINGLETON_ID,
+            lastInteractionAt = state.lastInteractionAt,
+            consecutiveTouches = state.consecutiveTouches,
+            touchRewardCountToday = state.touchRewardCountToday,
+            conversationCountToday = state.conversationCountToday,
+            miniGameRewardCountToday = state.miniGameRewardCountToday,
+            lastDailyResetDate = state.lastDailyResetDate?.toString(),
         )
     }
 }
