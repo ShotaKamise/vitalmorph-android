@@ -63,6 +63,8 @@ import app.vitalmorph.domain.BattleOutcome
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.MiniGameKind
+import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterForm
 import app.vitalmorph.domain.MonsterSex
 import app.vitalmorph.domain.MonsterStage
@@ -121,6 +123,12 @@ fun VitaMorphApp(
             when {
                 state.loading && !state.onboardingComplete -> LoadingScreen()
                 !state.onboardingComplete -> OnboardingScreen(onFinish = viewModel::finishOnboarding)
+                state.activeMiniGame != null -> MiniGameOverlay(
+                    kind = state.activeMiniGame!!,
+                    seed = state.miniGameSeed,
+                    onFinish = viewModel::finishMiniGame,
+                    onCancel = viewModel::cancelMiniGame,
+                )
                 else -> MainGameScreen(
                     state = state,
                     snackbar = snackbar,
@@ -140,6 +148,7 @@ fun VitaMorphApp(
                     onReactionShown = viewModel::clearTouchReaction,
                     onDialogueChoice = viewModel::onDialogueChoice,
                     onTalkAgain = viewModel::talkAgain,
+                    onStartMiniGame = viewModel::startMiniGame,
                 )
             }
         }
@@ -252,6 +261,7 @@ private fun MainGameScreen(
     onReactionShown: () -> Unit,
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
+    onStartMiniGame: (MiniGameKind) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -302,6 +312,7 @@ private fun MainGameScreen(
                     onReactionShown,
                     onDialogueChoice,
                     onTalkAgain,
+                    onStartMiniGame,
                 )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
@@ -323,6 +334,7 @@ private fun HomeScreen(
     onReactionShown: () -> Unit,
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
+    onStartMiniGame: (MiniGameKind) -> Unit,
 ) {
     val evolution = state.evolution ?: return
     val todayData = state.days.lastOrNull()
@@ -352,6 +364,12 @@ private fun HomeScreen(
                     onTalkAgain = onTalkAgain,
                 )
             }
+        }
+        item {
+            MiniGameCard(
+                rewardsUsedToday = state.interaction.miniGameRewardCountToday,
+                onStart = onStartMiniGame,
+            )
         }
         if (state.trainerName == null) {
             item {
@@ -515,6 +533,34 @@ private fun MonsterHero(
 }
 
 @Composable
+private fun MiniGameCard(
+    rewardsUsedToday: Int,
+    onStart: (MiniGameKind) -> Unit,
+) {
+    val remaining = (MiniGameRules.REWARDS_PER_DAY - rewardsUsedToday).coerceAtLeast(0)
+    ElevatedCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("ミニゲーム", fontWeight = FontWeight.Bold)
+                Text(
+                    if (remaining > 0) "きょうのごほうび 残り$remaining 回" else "きょうのごほうびは上限(あそぶのは自由)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Gold,
+                )
+            }
+            MiniGameKind.entries.forEach { kind ->
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { onStart(kind) }) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Text(kind.label, fontWeight = FontWeight.Bold)
+                        Text(kind.summary, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun DialogueCard(
     monsterName: String,
     dialogue: DialogueLine,
@@ -643,6 +689,13 @@ private fun ArenaScreen(
                         MonsterVisual(currentForm, Modifier.size(190.dp), motion = MonsterMotion.VICTORY)
                         Text(currentForm.name, fontSize = 24.sp, fontWeight = FontWeight.Black)
                         Text("4つの技と3種類のアイテムで戦います", color = Gold)
+                        state.generation?.let { generation ->
+                            Text(
+                                "コンディション: ${MoodEngine.moodBand(generation.mood).label}" +
+                                    if (generation.bond >= app.vitalmorph.domain.BattleEngine.CHEER_BOND_THRESHOLD) "・応援スタンバイ!" else "",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
                     }
                 }
             }

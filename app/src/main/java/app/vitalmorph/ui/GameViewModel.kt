@@ -20,6 +20,8 @@ import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.InteractionEngine
 import app.vitalmorph.domain.InteractionState
 import app.vitalmorph.domain.LegacyStats
+import app.vitalmorph.domain.MiniGameKind
+import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MoodEngine
 import app.vitalmorph.domain.SexAssigner
@@ -75,6 +77,8 @@ data class GameUiState(
     val dialogue: DialogueLine? = null,
     val dialogueReply: String? = null,
     val touchReaction: TouchReactionType? = null,
+    val activeMiniGame: MiniGameKind? = null,
+    val miniGameSeed: Int = 0,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -318,8 +322,63 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             evolution.form,
             evolution.metrics,
             seed = current.seasonStart.toEpochDay().toInt() + evolution.seasonDay + current.tournamentPoints,
+            mood = current.generation?.mood ?: MonsterGeneration.DEFAULT_MOOD,
+            bond = current.generation?.bond ?: MonsterGeneration.DEFAULT_BOND,
         )
         mutableState.update { it.copy(battle = battle, tournament = null) }
+    }
+
+    /** ミニゲームを開始する。プレイ自体は無制限、機嫌・絆への反映は1日3回まで。 */
+    fun startMiniGame(kind: MiniGameKind) {
+        mutableState.update {
+            it.copy(activeMiniGame = kind, miniGameSeed = System.currentTimeMillis().toInt())
+        }
+    }
+
+    fun cancelMiniGame() {
+        mutableState.update { it.copy(activeMiniGame = null) }
+    }
+
+    /** ミニゲーム終了。スコアから成否を判定し、上限内なら機嫌・絆へ反映する。 */
+    fun finishMiniGame(score: Int) {
+        val current = mutableState.value
+        val kind = current.activeMiniGame ?: return
+        val result = MiniGameRules.resultFor(kind, score)
+        val reward = InteractionEngine.onMiniGame(
+            state = current.interaction,
+            now = System.currentTimeMillis(),
+            today = current.today,
+        )
+        val moodDelta = if (result.success) MoodEngine.MINIGAME_SUCCESS_MOOD else MoodEngine.MINIGAME_TRY_MOOD
+        val bondDelta = if (result.success) MoodEngine.MINIGAME_SUCCESS_BOND else 0
+        val generation = current.generation
+        val updated = if (generation != null && reward.rewarded) {
+            MoodEngine.applyDelta(generation, moodDelta, bondDelta)
+        } else generation
+        viewModelScope.launch {
+            runCatching {
+                profiles.saveInteractionState(reward.state)
+                if (updated != null && updated != generation) profiles.updateMoodBond(updated)
+            }
+        }
+        val message = buildString {
+            append("${kind.label}: ${result.score} / ${result.maxScore}点")
+            append(if (result.success) "でクリア！" else "。また挑戦しよう！")
+            if (reward.rewarded) {
+                append(" 機嫌+$moodDelta")
+                if (bondDelta > 0) append("・絆+$bondDelta")
+            } else {
+                append("(今日の報酬は上限。あそぶのは自由！)")
+            }
+        }
+        mutableState.update {
+            it.copy(
+                activeMiniGame = null,
+                interaction = reward.state,
+                generation = updated ?: it.generation,
+                message = message,
+            )
+        }
     }
 
     fun useBattleMove(moveId: String) {
