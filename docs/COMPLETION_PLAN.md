@@ -26,7 +26,7 @@
 - UI側の代用マッピング(VICTORY/HIT/IDLE)を新モーションへ差し替える: MonsterHero(タッチ3種+機嫌BAD時SAD)、DialogueCard表示中TALK、ミニゲーム結果でMINIGAME_SUCCESS。
 - docs/MONSTER_ASSET_CONTRACT.md の「追加予定モーション」を実装済みへ更新。
 
-### T2: 性格システム — [ ] 未着手
+### T2: 性格システム — [x] 完了(2026-07-12)
 
 孵化時に5性格(がんばりや/のんびり/クール/あまえんぼう/きまぐれ)を抽選し世代へ永続化(Room v7)。能力差は付けない(規約)。
 

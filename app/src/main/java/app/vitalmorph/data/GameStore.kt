@@ -85,6 +85,19 @@ class GameStore(context: Context) {
         preferences.edit().putInt("tournament_points", points).apply()
     }
 
+    /**
+     * 進行中の大会状態(JSONスナップショット)を保存する。nullで消去する。
+     * これは一時的なゲーム状態のため `StoredGameState`/`load()` には含めない。
+     */
+    fun saveBattleState(json: String?) {
+        preferences.edit().apply {
+            if (json == null) remove("battle_state") else putString("battle_state", json)
+        }.apply()
+    }
+
+    /** 保存済みの進行中大会状態のJSON。無ければnull。 */
+    fun battleState(): String? = preferences.getString("battle_state", null)
+
     fun setTodayWorkoutTag(date: LocalDate, tag: WorkoutTag) {
         val json = JSONObject(preferences.getString("workout_tags", "{}") ?: "{}")
         json.put(date.toString(), tag.name)

@@ -137,6 +137,16 @@ selectedOriginPackages
 
 Data Originが異なるNutritionRecordを推測だけで重複排除しない。ユーザーが優先元を選択できることを必須とする。
 
+## 進行中の大会状態(battle_state)
+
+進行中のターン制大会(`TurnBattleState`)は、`GameStore` のSharedPreferences値 `battle_state`
+へJSONスナップショットとして保存する(`BattleStateCodec`、org.json使用、Roomは使わない)。
+
+- 一時的な進行状態のため `StoredGameState`/`load()` には含めない。
+- JSONへ `version` を持たせ、バージョン不一致・破損時は復元せず安全に破棄する(nullを返す)。
+- 保存: 各バトル操作後。消去(null): 大会終了(優勝・敗退)・シーズン完了・全リセット時。
+- 全フィールドを保存し、往復でデータクラスの等価性を保つ。
+
 ## 既存データ移行
 
 現在の `GameStore` から次を保持する。

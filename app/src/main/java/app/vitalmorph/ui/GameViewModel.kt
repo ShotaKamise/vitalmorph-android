@@ -13,6 +13,8 @@ import app.vitalmorph.data.OpenFoodFactsRepository
 import app.vitalmorph.data.ProfileRepository
 import app.vitalmorph.data.db.VitaMorphDatabase
 import app.vitalmorph.domain.BattleEngine
+import app.vitalmorph.domain.BattleOutcome
+import app.vitalmorph.domain.BattleStateCodec
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueContext
@@ -202,9 +204,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val favoriteFoodIds = runCatching { foods.favoriteIds() }.getOrDefault(emptySet())
             val recentFoods = runCatching { foods.recentFoods() }.getOrDefault(emptyList())
             val dialogue = dialogueFor(trainerName, evolution, generation, rawDays, stored.goals, today)
+            // 進行中の大会状態を復元する。オンボーディング完了かつシーズン継続中(28日目まで)のみ。
+            // 破損データはアプリを落とさず破棄する。
+            val currentBattle = mutableState.value.battle
+            val restoredBattle = if (currentBattle == null && evolution != null && evolution.seasonDay <= 28) {
+                store.battleState()?.let { stored ->
+                    BattleStateCodec.fromJson(stored) ?: run {
+                        store.saveBattleState(null)
+                        null
+                    }
+                }
+            } else {
+                currentBattle
+            }
             mutableState.update {
                 it.copy(
                     loading = false,
+                    battle = restoredBattle,
                     onboardingComplete = stored.onboardingComplete,
                     goals = stored.goals,
                     seasonStart = stored.seasonStart,
@@ -613,7 +629,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             bond = current.generation?.bond ?: MonsterGeneration.DEFAULT_BOND,
             legacy = current.legacyStats,
         )
+        persistBattle(battle)
         mutableState.update { it.copy(battle = battle, tournament = null) }
+    }
+
+    /**
+     * 進行中の大会状態を保存する。大会が終わった(優勝・敗退)状態は結果画面が閉じれば
+     * 復元不要のため保存せず消去する。
+     */
+    private fun persistBattle(state: TurnBattleState?) {
+        if (state == null ||
+            state.outcome == BattleOutcome.TOURNAMENT_WON ||
+            state.outcome == BattleOutcome.PLAYER_LOST
+        ) {
+            store.saveBattleState(null)
+        } else {
+            store.saveBattleState(BattleStateCodec.toJson(state))
+        }
     }
 
     /** ミニゲームを開始する。プレイ自体は無制限、機嫌・絆への反映は1日3回まで。 */
@@ -685,7 +717,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun advanceBattleRound() {
         val current = mutableState.value.battle ?: return
-        mutableState.update { it.copy(battle = BattleEngine.nextRound(current)) }
+        val next = BattleEngine.nextRound(current)
+        persistBattle(next)
+        mutableState.update { it.copy(battle = next) }
     }
 
     private fun updateBattle(action: (TurnBattleState) -> TurnBattleState) {
@@ -695,6 +729,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val result = BattleEngine.resultFor(updated)
         val bestPoints = result?.let { maxOf(current.tournamentPoints, it.tournamentPoints) }
         if (bestPoints != null) store.saveTournamentPoints(bestPoints)
+        persistBattle(updated)
         mutableState.update {
             it.copy(
                 battle = updated,
@@ -748,6 +783,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             store.completeSeason(points)
+            store.saveBattleState(null)
             val message = buildString {
                 append("シーズン完了: トレーナー経験値 +$points")
                 if (grantedTotal > 0) append("・継承ポイント +$grantedTotal")
@@ -761,6 +797,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { profiles.clearAll() }
             runCatching { foods.clearAll() }
+            store.saveBattleState(null)
             store.reset()
             mutableState.value = GameUiState()
             refresh()
