@@ -306,8 +306,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (updated != generation) profiles.updateMoodBond(updated)
             }
         }
+        val reply = if (choice.followUp.isNotBlank()) {
+            choice.reply + "\n" + choice.followUp
+        } else {
+            choice.reply
+        }
         mutableState.update {
-            it.copy(interaction = result.state, generation = updated, dialogueReply = choice.reply)
+            it.copy(interaction = result.state, generation = updated, dialogueReply = reply)
         }
     }
 

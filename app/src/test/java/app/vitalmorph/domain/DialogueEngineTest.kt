@@ -21,11 +21,86 @@ class DialogueEngineTest {
         for (seed in 0..30) {
             val line = DialogueEngine.greeting(base, seed)
             assertFalse(line.text.contains("{name}"))
-            assertTrue(line.choices.none { it.reply.contains("{name}") || it.text.contains("{name}") })
+            assertTrue(
+                line.choices.none {
+                    it.reply.contains("{name}") || it.text.contains("{name}") || it.followUp.contains("{name}")
+                },
+            )
         }
         val named = DialogueEngine.greeting(base, 0)
         assertTrue((0..10).map { DialogueEngine.greeting(base, it).text }.any { it.contains("ショウタ") })
         assertEquals(named.text, DialogueEngine.greeting(base, 0).text)
+    }
+
+    @Test
+    fun `every topic across contexts is coherent and leaves no name placeholder`() {
+        val moods = listOf(5, 30, 50, 70, 90)
+        for (personality in Personality.entries) {
+            for (time in TimeOfDay.entries) {
+                for (mood in moods) {
+                    for (recorded in listOf(true, false)) {
+                        for (won in listOf(null, true, false)) {
+                            val context = base.copy(
+                                personality = personality,
+                                timeOfDay = time,
+                                mood = mood,
+                                recordedToday = recorded,
+                                lastTournamentWon = won,
+                                stepsToday = 9_000,
+                                stepGoal = 8_000,
+                                seasonDay = 24,
+                                stage = MonsterStage.FINAL,
+                            )
+                            for (seed in 0..24) {
+                                val line = DialogueEngine.greeting(context, seed)
+                                assertFalse(line.text.contains("{name}"))
+                                assertTrue(line.text.isNotBlank())
+                                assertEquals(2, line.choices.size)
+                                for (choice in line.choices) {
+                                    assertTrue(choice.text.isNotBlank())
+                                    assertTrue(choice.reply.isNotBlank())
+                                    assertFalse(choice.text.contains("{name}"))
+                                    assertFalse(choice.reply.contains("{name}"))
+                                    assertFalse(choice.followUp.contains("{name}"))
+                                    assertTrue(choice.moodDelta in -3..3)
+                                    assertTrue(choice.bondDelta in 0..2)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `different seeds surface several distinct topics for a generic context`() {
+        val topics = (0..40).map { DialogueEngine.greeting(base, it).text }.toSet()
+        assertTrue("expected at least 3 distinct topics, got ${topics.size}", topics.size >= 3)
+    }
+
+    @Test
+    fun `no forbidden tone words appear in any generated text`() {
+        val forbidden = listOf("ダメ", "だめ", "サボ", "太った", "太っ")
+        for (personality in Personality.entries) {
+            for (time in TimeOfDay.entries) {
+                for (mood in listOf(5, 50, 90)) {
+                    val context = base.copy(personality = personality, timeOfDay = time, mood = mood, recordedToday = false)
+                    for (seed in 0..24) {
+                        val line = DialogueEngine.greeting(context, seed)
+                        val all = buildList {
+                            add(line.text)
+                            line.choices.forEach {
+                                add(it.text); add(it.reply); add(it.followUp)
+                            }
+                        }
+                        for (word in forbidden) {
+                            assertTrue("forbidden word '$word'", all.none { it.contains(word) })
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Test
