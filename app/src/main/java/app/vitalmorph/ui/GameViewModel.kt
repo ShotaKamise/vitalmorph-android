@@ -7,11 +7,16 @@ import androidx.lifecycle.viewModelScope
 import app.vitalmorph.data.DemoDataFactory
 import app.vitalmorph.data.GameStore
 import app.vitalmorph.data.HealthConnectRepository
+import app.vitalmorph.data.ProfileRepository
+import app.vitalmorph.data.db.VitaMorphDatabase
 import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.LegacyStats
+import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.TournamentResult
+import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TrainerProgress
 import app.vitalmorph.domain.TrainerRank
 import app.vitalmorph.domain.TrainerRankEngine
@@ -49,6 +54,9 @@ data class GameUiState(
     val tournament: TournamentResult? = null,
     val battle: TurnBattleState? = null,
     val tournamentPoints: Int = 0,
+    val trainerName: String? = null,
+    val generation: MonsterGeneration? = null,
+    val legacyStats: LegacyStats = LegacyStats(),
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -56,6 +64,7 @@ data class GameUiState(
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val store = GameStore(application)
     private val health = HealthConnectRepository(application)
+    private val profiles = ProfileRepository(VitaMorphDatabase.getInstance(application))
     private val mutableState = MutableStateFlow(GameUiState())
     val state: StateFlow<GameUiState> = mutableState.asStateFlow()
 
@@ -84,6 +93,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val evolution = if (stored.onboardingComplete) {
                 EvolutionEngine.evaluate(rawDays, stored.goals, stored.seasonStart, today)
             } else null
+            val generation = if (stored.onboardingComplete) {
+                runCatching { profiles.ensureCurrentGeneration(stored) }.getOrNull()
+            } else null
+            val trainerName = runCatching { profiles.trainerProfile()?.name }.getOrNull()
+            val legacyStats = runCatching { profiles.legacyStats() }.getOrDefault(LegacyStats())
             mutableState.update {
                 it.copy(
                     loading = false,
@@ -99,6 +113,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     trainerProgress = stored.trainerProgress,
                     trainerRank = TrainerRankEngine.rankFor(stored.trainerProgress),
                     tournamentPoints = stored.tournamentPoints,
+                    trainerName = trainerName,
+                    generation = generation,
+                    legacyStats = legacyStats,
                 )
             }
         }
@@ -116,6 +133,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectTab(tab: AppTab) {
         mutableState.update { it.copy(selectedTab = tab) }
+    }
+
+    fun setTrainerName(rawName: String) {
+        val error = TrainerNameRules.validate(rawName)
+        if (error != null) {
+            mutableState.update { it.copy(message = error) }
+            return
+        }
+        viewModelScope.launch {
+            val profile = runCatching { profiles.setTrainerName(rawName) }.getOrNull()
+            if (profile == null) {
+                mutableState.update { it.copy(message = "トレーナー名を保存できませんでした") }
+            } else {
+                mutableState.update { it.copy(trainerName = profile.name, message = "トレーナー名を保存しました") }
+            }
+        }
     }
 
     fun setWorkoutTag(tag: WorkoutTag) {
@@ -178,15 +211,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         val seasonMetrics = EvolutionEngine.metrics(current.days, current.goals)
         val points = TrainerRankEngine.seasonPoints(current.days, seasonMetrics, current.tournamentPoints)
-        store.completeSeason(points)
-        mutableState.update { it.copy(tournament = null, battle = null, message = "シーズン完了: トレーナー経験値 +$points") }
-        refresh()
+        viewModelScope.launch {
+            // 現世代を終了日付きで閉じる。次のrefreshで新世代がランダムな性別で孵化する。
+            runCatching { profiles.closeCurrentGeneration(current.today) }
+            store.completeSeason(points)
+            mutableState.update { it.copy(tournament = null, battle = null, message = "シーズン完了: トレーナー経験値 +$points") }
+            refresh()
+        }
     }
 
     fun resetAll() {
-        store.reset()
-        mutableState.value = GameUiState()
-        refresh()
+        viewModelScope.launch {
+            runCatching { profiles.clearAll() }
+            store.reset()
+            mutableState.value = GameUiState()
+            refresh()
+        }
     }
 
     fun clearMessage() {

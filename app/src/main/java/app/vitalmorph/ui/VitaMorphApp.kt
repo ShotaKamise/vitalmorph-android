@@ -60,7 +60,9 @@ import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.MonsterForm
+import app.vitalmorph.domain.MonsterSex
 import app.vitalmorph.domain.MonsterStage
+import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TournamentResult
 import app.vitalmorph.domain.TurnBattleState
 import app.vitalmorph.domain.TrainerRank
@@ -125,6 +127,7 @@ fun VitaMorphApp(
                     onAdvanceDemo = viewModel::advanceDemoWeek,
                     onCompleteSeason = viewModel::completeSeason,
                     onReset = viewModel::resetAll,
+                    onSetTrainerName = viewModel::setTrainerName,
                 )
             }
         }
@@ -232,6 +235,7 @@ private fun MainGameScreen(
     onAdvanceDemo: () -> Unit,
     onCompleteSeason: () -> Unit,
     onReset: () -> Unit,
+    onSetTrainerName: (String) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -272,11 +276,11 @@ private fun MainGameScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.selectedTab) {
-                AppTab.HOME -> HomeScreen(state, onRequestHealthPermissions, onRefresh, onWorkoutTag)
+                AppTab.HOME -> HomeScreen(state, onRequestHealthPermissions, onRefresh, onWorkoutTag, onSetTrainerName)
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
                 AppTab.TRAINER -> TrainerScreen(state)
-                AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset)
+                AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset, onSetTrainerName)
             }
         }
     }
@@ -288,6 +292,7 @@ private fun HomeScreen(
     onRequestPermissions: () -> Unit,
     onRefresh: () -> Unit,
     onWorkoutTag: (WorkoutTag) -> Unit,
+    onSetTrainerName: (String) -> Unit,
 ) {
     val evolution = state.evolution ?: return
     val todayData = state.days.lastOrNull()
@@ -296,7 +301,18 @@ private fun HomeScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { MonsterHero(evolution) }
+        item { MonsterHero(evolution, state.generation?.sex) }
+        if (state.trainerName == null) {
+            item {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = SurfaceHigh)) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("トレーナー名を設定", fontWeight = FontWeight.Bold)
+                        Text("モンスターがあなたを呼ぶ名前です。あとから設定でも変更できます。", style = MaterialTheme.typography.bodySmall)
+                        TrainerNameEditor(current = null, buttonLabel = "この名前にする", onSave = onSetTrainerName)
+                    }
+                }
+            }
+        }
         if (!state.demoMode && !state.permissionsGranted) {
             item {
                 ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = SurfaceHigh)) {
@@ -348,7 +364,7 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun MonsterHero(evolution: EvolutionResult) {
+private fun MonsterHero(evolution: EvolutionResult, sex: MonsterSex? = null) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = Color(evolution.form.accent).copy(alpha = 0.12f)),
@@ -356,7 +372,17 @@ private fun MonsterHero(evolution: EvolutionResult) {
         Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(evolution.form.stage.label, color = Color(evolution.form.accent), fontWeight = FontWeight.Bold)
             MonsterVisual(evolution.form, Modifier.size(210.dp))
-            Text(evolution.form.name, fontSize = 28.sp, fontWeight = FontWeight.Black)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(evolution.form.name, fontSize = 28.sp, fontWeight = FontWeight.Black)
+                sex?.let {
+                    Text(
+                        it.mark,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (it == MonsterSex.MALE) Mint else Gold,
+                    )
+                }
+            }
             Text(evolution.form.role, color = Gold)
             Text(evolution.form.description, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(16.dp))
@@ -685,6 +711,7 @@ private fun SettingsScreen(
     onAdvanceDemo: () -> Unit,
     onCompleteSeason: () -> Unit,
     onReset: () -> Unit,
+    onSetTrainerName: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -693,6 +720,22 @@ private fun SettingsScreen(
     ) {
         item {
             SectionTitle("設定")
+            ElevatedCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("トレーナー名", fontWeight = FontWeight.Bold)
+                    Text(
+                        state.trainerName?.let { "現在の名前: $it" } ?: "まだ設定されていません",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    TrainerNameEditor(
+                        current = state.trainerName,
+                        buttonLabel = if (state.trainerName == null) "設定する" else "変更する",
+                        onSave = onSetTrainerName,
+                    )
+                }
+            }
+        }
+        item {
             ElevatedCard {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("目標", fontWeight = FontWeight.Bold)
@@ -721,6 +764,31 @@ private fun SettingsScreen(
         }
         item { HorizontalDivider() }
         item { OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onReset) { Text("すべてのゲームデータを初期化") } }
+    }
+}
+
+@Composable
+private fun TrainerNameEditor(
+    current: String?,
+    buttonLabel: String,
+    onSave: (String) -> Unit,
+) {
+    var input by remember(current) { mutableStateOf(current ?: "") }
+    val error = if (input.isEmpty()) null else TrainerNameRules.validate(input)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("トレーナー名 (1〜${TrainerNameRules.MAX_LENGTH}文字)") },
+            singleLine = true,
+            isError = error != null,
+            supportingText = { error?.let { Text(it) } },
+        )
+        Button(
+            onClick = { onSave(input) },
+            enabled = input.isNotBlank() && error == null && TrainerNameRules.normalize(input) != current,
+        ) { Text(buttonLabel) }
     }
 }
 

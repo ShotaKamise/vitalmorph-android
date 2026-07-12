@@ -8,7 +8,6 @@ import app.vitalmorph.domain.GenerationPlan
 import app.vitalmorph.domain.GenerationPlanner
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
-import app.vitalmorph.domain.SexAssigner
 import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TrainerProfile
 import java.time.LocalDate
@@ -70,24 +69,15 @@ class ProfileRepository(
     }
 
     /**
-     * シーズン完了時に現在世代を閉じ、次シーズンの世代をランダムな性別で孵化する。
+     * シーズン完了時に現在世代を閉じる。
+     * 次の世代は、次回の [ensureCurrentGeneration] が新しいseasonStartを検出して
+     * ランダムな性別で孵化する。
      */
-    suspend fun startNextGeneration(
-        endDate: LocalDate,
-        nextSeasonStart: LocalDate,
-        nextGenerationNumber: Int,
-    ): MonsterGeneration {
+    suspend fun closeCurrentGeneration(endDate: LocalDate) {
         val dao = database.monsterGenerationDao()
         dao.current()?.let { open ->
             dao.update(open.copy(seasonEnd = endDate.toString()))
         }
-        return insert(
-            MonsterGeneration(
-                generationNumber = nextGenerationNumber,
-                sex = SexAssigner.randomHatch(random),
-                seasonStart = nextSeasonStart,
-            ),
-        )
     }
 
     suspend fun legacyStats(): LegacyStats =
