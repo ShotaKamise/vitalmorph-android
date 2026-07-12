@@ -1,6 +1,7 @@
 package app.vitalmorph.data.db
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import app.vitalmorph.domain.EvolutionRoute
 import app.vitalmorph.domain.FoodCatalogItem
@@ -11,6 +12,7 @@ import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MonsterSex
 import app.vitalmorph.domain.Personality
+import app.vitalmorph.domain.RecipeItem
 import app.vitalmorph.domain.TrainerProfile
 import java.time.LocalDate
 
@@ -188,6 +190,54 @@ data class CustomFoodEntity(
 data class FoodFavoriteEntity(
     @PrimaryKey val foodId: String,
 )
+
+/**
+ * 保存したレシピの見出し(v0.11 / COMPLETION_PLAN T5)。材料は [RecipeItemEntity] に分けて持つ。
+ * 外部キー制約は張らず、削除時にDAO側で両テーブルを消す(既存スキーマの方針に合わせる)。
+ */
+@Entity(tableName = "recipe")
+data class RecipeEntity(
+    @PrimaryKey(autoGenerate = true) val recipeId: Long = 0,
+    val name: String,
+    val createdAt: Long,
+)
+
+/** レシピの構成材料1件(v0.11 / COMPLETION_PLAN T5)。recipeId で親レシピへ紐づく。 */
+@Entity(tableName = "recipe_item", indices = [Index("recipeId")])
+data class RecipeItemEntity(
+    @PrimaryKey(autoGenerate = true) val itemId: Long = 0,
+    val recipeId: Long,
+    val name: String,
+    val amount: Double,
+    val amountUnit: String,
+    val calories: Double,
+    val proteinGrams: Double,
+    val fatGrams: Double,
+    val carbsGrams: Double,
+) {
+    fun toDomain() = RecipeItem(
+        name = name,
+        amount = amount,
+        amountUnit = amountUnit,
+        calories = calories,
+        proteinGrams = proteinGrams,
+        fatGrams = fatGrams,
+        carbsGrams = carbsGrams,
+    )
+
+    companion object {
+        fun fromDomain(recipeId: Long, item: RecipeItem) = RecipeItemEntity(
+            recipeId = recipeId,
+            name = item.name,
+            amount = item.amount,
+            amountUnit = item.amountUnit,
+            calories = item.calories,
+            proteinGrams = item.proteinGrams,
+            fatGrams = item.fatGrams,
+            carbsGrams = item.carbsGrams,
+        )
+    }
+}
 
 @Entity(tableName = "interaction_state")
 data class InteractionStateEntity(

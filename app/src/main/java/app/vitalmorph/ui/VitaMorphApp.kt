@@ -82,6 +82,7 @@ import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.NutritionSource
+import app.vitalmorph.domain.Recipe
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterForm
@@ -182,6 +183,8 @@ fun VitaMorphApp(
                     onClearExternalResults = viewModel::clearExternalResults,
                     onSetTodayNutritionChoice = viewModel::setTodayNutritionChoice,
                     onSaveRecipe = viewModel::saveRecipe,
+                    onAddRecipeToMeal = viewModel::addRecipeToMeal,
+                    onDeleteRecipe = viewModel::deleteRecipe,
                 )
             }
         }
@@ -308,6 +311,8 @@ private fun MainGameScreen(
     onClearExternalResults: () -> Unit,
     onSetTodayNutritionChoice: (DayNutritionChoice) -> Unit,
     onSaveRecipe: (String, List<Pair<FoodCatalogItem, Double>>) -> Unit,
+    onAddRecipeToMeal: (MealSlot, Recipe) -> Unit,
+    onDeleteRecipe: (Recipe) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -374,6 +379,8 @@ private fun MainGameScreen(
                     onClearExternal = onClearExternalResults,
                     onSetTodayChoice = onSetTodayNutritionChoice,
                     onSaveRecipe = onSaveRecipe,
+                    onAddRecipeToMeal = onAddRecipeToMeal,
+                    onDeleteRecipe = onDeleteRecipe,
                 )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution, state.generation?.route)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)

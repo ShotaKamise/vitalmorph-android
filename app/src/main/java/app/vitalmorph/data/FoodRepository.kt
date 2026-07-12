@@ -3,10 +3,14 @@ package app.vitalmorph.data
 import app.vitalmorph.data.db.CustomFoodEntity
 import app.vitalmorph.data.db.FoodEntryEntity
 import app.vitalmorph.data.db.FoodFavoriteEntity
+import app.vitalmorph.data.db.RecipeEntity
+import app.vitalmorph.data.db.RecipeItemEntity
 import app.vitalmorph.data.db.VitaMorphDatabase
 import app.vitalmorph.domain.FoodCatalogItem
 import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.MealSlot
+import app.vitalmorph.domain.Recipe
+import app.vitalmorph.domain.RecipeItem
 import java.time.LocalDate
 import java.util.UUID
 
@@ -116,6 +120,48 @@ class FoodRepository(
         return item
     }
 
+    /** 保存済みレシピを材料付きで新しい順に返す。 */
+    suspend fun recipes(): List<Recipe> {
+        val dao = database.recipeDao()
+        return dao.recipes().map { entity ->
+            Recipe(
+                recipeId = entity.recipeId,
+                name = entity.name,
+                items = dao.itemsFor(entity.recipeId).map { it.toDomain() },
+                createdAt = entity.createdAt,
+            )
+        }
+    }
+
+    /**
+     * レシピを材料付きで保存する。合計栄養は自作食品(1食)としても同時に保存し、
+     * 従来どおりカタログから1タップで記録できるようにする。
+     */
+    suspend fun saveRecipe(name: String, items: List<RecipeItem>): Recipe {
+        val timestamp = now()
+        val cleanName = name.trim()
+        val dao = database.recipeDao()
+        val recipeId = dao.insertRecipe(RecipeEntity(name = cleanName, createdAt = timestamp))
+        dao.insertItems(items.map { RecipeItemEntity.fromDomain(recipeId, it) })
+        val recipe = Recipe(recipeId = recipeId, name = cleanName, items = items, createdAt = timestamp)
+        // 合計を自作食品としても保存(従来挙動の維持)。
+        saveCustomFood(
+            name = cleanName,
+            standardAmount = 1.0,
+            amountUnit = "食",
+            calories = recipe.totalCalories,
+            proteinGrams = recipe.totalProtein,
+            fatGrams = recipe.totalFat,
+            carbsGrams = recipe.totalCarbs,
+        )
+        return recipe
+    }
+
+    suspend fun deleteRecipe(recipeId: Long) {
+        database.recipeDao().deleteItemsFor(recipeId)
+        database.recipeDao().deleteRecipe(recipeId)
+    }
+
     suspend fun favoriteIds(): Set<String> =
         database.foodFavoriteDao().all().toSet()
 
@@ -138,5 +184,7 @@ class FoodRepository(
         database.foodEntryDao().clear()
         database.customFoodDao().clear()
         database.foodFavoriteDao().clear()
+        database.recipeDao().clearItems()
+        database.recipeDao().clearRecipes()
     }
 }

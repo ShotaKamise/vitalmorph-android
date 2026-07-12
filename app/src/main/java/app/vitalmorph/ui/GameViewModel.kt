@@ -37,6 +37,8 @@ import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MoodEngine
 import app.vitalmorph.domain.NutritionResolver
 import app.vitalmorph.domain.NutritionSource
+import app.vitalmorph.domain.Recipe
+import app.vitalmorph.domain.RecipeFactory
 import app.vitalmorph.domain.SexAssigner
 import app.vitalmorph.domain.TimeOfDay
 import app.vitalmorph.domain.TouchArea
@@ -100,6 +102,7 @@ data class GameUiState(
     val customFoods: List<FoodCatalogItem> = emptyList(),
     val favoriteFoodIds: Set<String> = emptySet(),
     val recentFoods: List<FoodEntry> = emptyList(),
+    val recipes: List<Recipe> = emptyList(),
     val nutritionSource: NutritionSource = NutritionSource.VITALMORPH_FIRST,
     val todayNutritionChoice: DayNutritionChoice? = null,
     val externalResults: List<ExternalFood> = emptyList(),
@@ -217,6 +220,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val customFoods = runCatching { foods.customFoods() }.getOrDefault(emptyList())
             val favoriteFoodIds = runCatching { foods.favoriteIds() }.getOrDefault(emptySet())
             val recentFoods = runCatching { foods.recentFoods() }.getOrDefault(emptyList())
+            val recipes = runCatching { foods.recipes() }.getOrDefault(emptyList())
             val dialogue = dialogueFor(trainerName, evolution, generation, rawDays, stored.goals, today)
             // 進行中の大会状態を復元する。オンボーディング完了かつシーズン継続中(28日目まで)のみ。
             // 破損データはアプリを落とさず破棄する。
@@ -261,6 +265,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     customFoods = customFoods,
                     favoriteFoodIds = favoriteFoodIds,
                     recentFoods = recentFoods,
+                    recipes = recipes,
                     nutritionSource = stored.nutritionSource,
                     todayNutritionChoice = stored.nutritionDayChoices[today],
                 )
@@ -575,31 +580,54 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 複数の食品を1つのレシピ(自作食品)として保存する。栄養は合計値で記録する。 */
+    /**
+     * 複数の食品を1つのレシピとして材料付きで保存する(合計を自作食品としても保存)。
+     * 栄養は各材料を数量換算した値を保持する。
+     */
     fun saveRecipe(name: String, parts: List<Pair<FoodCatalogItem, Double>>) {
         if (name.isBlank() || parts.isEmpty()) {
             mutableState.update { it.copy(message = "レシピ名と材料を入力してください") }
             return
         }
         viewModelScope.launch {
-            runCatching {
-                val scaled = parts.map { (item, amount) -> item.scaledTo(amount) }
-                foods.saveCustomFood(
-                    name = name,
-                    standardAmount = 1.0,
-                    amountUnit = "食",
-                    calories = scaled.sumOf { it.calories },
-                    proteinGrams = scaled.sumOf { it.proteinGrams },
-                    fatGrams = scaled.sumOf { it.fatGrams },
-                    carbsGrams = scaled.sumOf { it.carbsGrams },
-                )
-            }.onFailure {
+            val ok = runCatching {
+                val recipe = RecipeFactory.fromParts(name, parts, System.currentTimeMillis())
+                foods.saveRecipe(recipe.name, recipe.items)
+            }.isSuccess
+            if (!ok) {
                 mutableState.update { state -> state.copy(message = "レシピを保存できませんでした") }
                 return@launch
             }
-            mutableState.update { it.copy(message = "レシピ「$name」を自作食品として保存しました") }
+            mutableState.update { it.copy(message = "レシピ「$name」を保存しました") }
             refresh()
         }
+    }
+
+    fun deleteRecipe(recipe: Recipe) {
+        viewModelScope.launch {
+            runCatching { foods.deleteRecipe(recipe.recipeId) }
+                .onFailure {
+                    mutableState.update { it.copy(message = "レシピを削除できませんでした") }
+                    return@launch
+                }
+            mutableState.update { it.copy(message = "レシピ「${recipe.name}」を削除しました") }
+            refresh()
+        }
+    }
+
+    /** レシピを合計栄養の1件(1食)として指定の食事区分へ記録する。 */
+    fun addRecipeToMeal(slot: MealSlot, recipe: Recipe) {
+        addFood(
+            slot = slot,
+            name = recipe.name,
+            amount = 1.0,
+            unit = "食",
+            calories = recipe.totalCalories,
+            protein = recipe.totalProtein,
+            fat = recipe.totalFat,
+            carbs = recipe.totalCarbs,
+            saveAsCustom = false,
+        )
     }
 
     private var dialogueSeedBump = 0

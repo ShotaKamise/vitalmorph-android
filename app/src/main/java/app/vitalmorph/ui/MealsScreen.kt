@@ -45,6 +45,7 @@ import app.vitalmorph.domain.FoodCatalogItem
 import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.NutritionSource
+import app.vitalmorph.domain.Recipe
 import app.vitalmorph.domain.UserGoals
 import kotlin.math.roundToInt
 
@@ -66,6 +67,8 @@ fun MealsScreen(
     onClearExternal: () -> Unit,
     onSetTodayChoice: (DayNutritionChoice) -> Unit,
     onSaveRecipe: (String, List<Pair<FoodCatalogItem, Double>>) -> Unit,
+    onAddRecipeToMeal: (MealSlot, Recipe) -> Unit,
+    onDeleteRecipe: (Recipe) -> Unit,
 ) {
     var addingSlot by remember { mutableStateOf<MealSlot?>(null) }
     var showScanner by remember { mutableStateOf(false) }
@@ -134,6 +137,9 @@ fun MealsScreen(
             }
         }
         item { RecipeBuilderCard(state, onSaveRecipe) }
+        if (state.recipes.isNotEmpty()) {
+            item { SavedRecipesCard(state.recipes, onAddRecipeToMeal, onDeleteRecipe) }
+        }
         item { WeeklyCaloriesCard(state.days.takeLast(7), state.goals) }
         item {
             Text(
@@ -244,6 +250,69 @@ private fun RecipeBuilderCard(
                     enabled = recipeName.isNotBlank() && parts.isNotEmpty(),
                 ) { Text("レシピを保存") }
             }
+        }
+    }
+}
+
+@Composable
+private fun SavedRecipesCard(
+    recipes: List<Recipe>,
+    onAddRecipeToMeal: (MealSlot, Recipe) -> Unit,
+    onDeleteRecipe: (Recipe) -> Unit,
+) {
+    ElevatedCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("保存したレシピ", fontWeight = FontWeight.Bold)
+            recipes.forEach { recipe ->
+                RecipeRow(recipe, onAddRecipeToMeal, onDeleteRecipe)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecipeRow(
+    recipe: Recipe,
+    onAddRecipeToMeal: (MealSlot, Recipe) -> Unit,
+    onDeleteRecipe: (Recipe) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(recipe.name, fontWeight = FontWeight.Bold)
+                Text(
+                    "材料${recipe.items.size}品・合計 ${recipe.totalCalories.roundToInt()}kcal",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.6f),
+                )
+            }
+            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "閉じる" else "材料") }
+        }
+        if (expanded) {
+            recipe.items.forEach { item ->
+                Text(
+                    "・${item.name} ${item.amount.roundToInt()}${item.amountUnit}(${item.calories.roundToInt()}kcal)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                )
+            }
+        }
+        Text("食事区分を選んで記録", style = MaterialTheme.typography.labelSmall, color = MealGold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            MealSlot.entries.forEach { slot ->
+                TextButton(
+                    onClick = { onAddRecipeToMeal(slot, recipe) },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp),
+                ) {
+                    Text(slot.label, fontSize = 12.sp, color = MealMint)
+                }
+            }
+        }
+        TextButton(onClick = { onDeleteRecipe(recipe) }) {
+            Text("削除", color = Color.White.copy(alpha = 0.7f))
         }
     }
 }

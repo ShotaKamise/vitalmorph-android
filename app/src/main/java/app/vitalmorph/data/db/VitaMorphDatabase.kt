@@ -17,8 +17,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CustomFoodEntity::class,
         FoodFavoriteEntity::class,
         DiscoveredFormEntity::class,
+        RecipeEntity::class,
+        RecipeItemEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class VitaMorphDatabase : RoomDatabase() {
@@ -30,6 +32,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
     abstract fun customFoodDao(): CustomFoodDao
     abstract fun foodFavoriteDao(): FoodFavoriteDao
     abstract fun discoveredFormDao(): DiscoveredFormDao
+    abstract fun recipeDao(): RecipeDao
 
     companion object {
         private const val DATABASE_NAME = "vitalmorph.db"
@@ -135,6 +138,32 @@ abstract class VitaMorphDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v9: レシピを材料付きで保存する表(recipe / recipe_item)を追加(COMPLETION_PLAN T5)。
+         * 既存テーブルは変更しない。外部キー制約は張らず、削除時にDAOで両表を消す。
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `recipe` (" +
+                        "`recipeId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `recipe_item` (" +
+                        "`itemId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`recipeId` INTEGER NOT NULL, `name` TEXT NOT NULL, " +
+                        "`amount` REAL NOT NULL, `amountUnit` TEXT NOT NULL, " +
+                        "`calories` REAL NOT NULL, `proteinGrams` REAL NOT NULL, " +
+                        "`fatGrams` REAL NOT NULL, `carbsGrams` REAL NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_recipe_item_recipeId` " +
+                        "ON `recipe_item` (`recipeId`)",
+                )
+            }
+        }
+
         @Volatile
         private var instance: VitaMorphDatabase? = null
 
@@ -145,7 +174,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
                     VitaMorphDatabase::class.java,
                     DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build()
                     .also { instance = it }
             }

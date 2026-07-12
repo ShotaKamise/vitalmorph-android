@@ -61,6 +61,60 @@ data class FoodCatalogItem(
     }
 }
 
+/** レシピを構成する材料1件。数量換算後の栄養値を保持する。 */
+data class RecipeItem(
+    val name: String,
+    val amount: Double,
+    val amountUnit: String,
+    val calories: Double,
+    val proteinGrams: Double,
+    val fatGrams: Double,
+    val carbsGrams: Double,
+)
+
+/**
+ * よく食べる組み合わせを材料付きで保存したレシピ(DATA_MODEL.mdのrecipe / recipe_item)。
+ * 合計栄養は材料の総和として算出する。
+ */
+data class Recipe(
+    val recipeId: Long = 0,
+    val name: String,
+    val items: List<RecipeItem>,
+    val createdAt: Long,
+) {
+    val totalCalories: Double get() = items.sumOf { it.calories }
+    val totalProtein: Double get() = items.sumOf { it.proteinGrams }
+    val totalFat: Double get() = items.sumOf { it.fatGrams }
+    val totalCarbs: Double get() = items.sumOf { it.carbsGrams }
+}
+
+/** レシピ組み立ての純粋ロジック。UI・永続化から切り離してテスト可能にする。 */
+object RecipeFactory {
+    /**
+     * カタログ材料と数量の組から [Recipe] を作る。
+     * 各材料は [FoodCatalogItem.scaledTo] で数量換算し、その数量・単位・栄養を [RecipeItem] に落とす。
+     */
+    fun fromParts(
+        name: String,
+        parts: List<Pair<FoodCatalogItem, Double>>,
+        createdAt: Long,
+    ): Recipe {
+        val items = parts.map { (item, amount) ->
+            val scaled = item.scaledTo(amount)
+            RecipeItem(
+                name = item.name,
+                amount = amount,
+                amountUnit = item.amountUnit,
+                calories = scaled.calories,
+                proteinGrams = scaled.proteinGrams,
+                fatGrams = scaled.fatGrams,
+                carbsGrams = scaled.carbsGrams,
+            )
+        }
+        return Recipe(name = name.trim(), items = items, createdAt = createdAt)
+    }
+}
+
 /** 1日分の栄養サマリー。 */
 data class DayNutrition(
     val calories: Double,

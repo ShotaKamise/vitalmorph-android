@@ -88,6 +88,33 @@ interface FoodFavoriteDao {
 }
 
 @Dao
+interface RecipeDao {
+    @Query("SELECT * FROM recipe ORDER BY createdAt DESC")
+    suspend fun recipes(): List<RecipeEntity>
+
+    @Query("SELECT * FROM recipe_item WHERE recipeId = :recipeId ORDER BY itemId ASC")
+    suspend fun itemsFor(recipeId: Long): List<RecipeItemEntity>
+
+    @Insert
+    suspend fun insertRecipe(entity: RecipeEntity): Long
+
+    @Insert
+    suspend fun insertItems(entities: List<RecipeItemEntity>)
+
+    @Query("DELETE FROM recipe WHERE recipeId = :recipeId")
+    suspend fun deleteRecipe(recipeId: Long)
+
+    @Query("DELETE FROM recipe_item WHERE recipeId = :recipeId")
+    suspend fun deleteItemsFor(recipeId: Long)
+
+    @Query("DELETE FROM recipe")
+    suspend fun clearRecipes()
+
+    @Query("DELETE FROM recipe_item")
+    suspend fun clearItems()
+}
+
+@Dao
 interface InteractionStateDao {
     @Query("SELECT * FROM interaction_state WHERE id = ${InteractionStateEntity.SINGLETON_ID}")
     suspend fun get(): InteractionStateEntity?
