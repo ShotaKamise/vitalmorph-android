@@ -189,18 +189,40 @@ object EvolutionEngine {
         return if (chooseFirst) candidates.first else candidates.second
     }
 
+    /** 第2週の動物系成長体6種(モルフィは含まない)。 */
+    private val growthForms: List<MonsterForm> =
+        listOf(leafang, galvol, rapizel, motchigrow, mossleep, runpact)
+
+    /** 動物ルートの成熟体12種。 */
+    private val beastIntermediates: List<MonsterForm> = listOf(
+        solfeon, aquanel, grandguard, fangrage, velox, skyRush,
+        bulkDome, emberPot, moonMoss, driftMark, igniDash, crackRun,
+    )
+
+    /** 動物系最終形態24種(成熟体ごとの2候補)。 */
+    private val animalFinals: List<MonsterForm> =
+        finalsByIntermediate.values.flatMap { listOf(it.first, it.second) }
+
     /**
      * 図鑑・検証用の全形態カタログ。承認済みIDのみを含み、公開済みIDは削除しない。
      * 旧進化表の成熟体・最終形態も、動物系14体の最終選抜が確定するまで保持する。
      */
     val allForms: List<MonsterForm> =
-        listOf(baby, leafang, galvol, rapizel, motchigrow, mossleep, runpact) +
-            listOf(
-                solfeon, aquanel, grandguard, fangrage, velox, skyRush,
-                bulkDome, emberPot, moonMoss, driftMark, igniDash, crackRun,
-            ) +
-            finalsByIntermediate.values.flatMap { listOf(it.first, it.second) } +
-            HumanoidRoster.all
+        listOf(baby) + growthForms + beastIntermediates + animalFinals + HumanoidRoster.all
+
+    /**
+     * 週末大会(U9)の相手候補プール。プレイヤーの成長段階に合わせて選ぶ。
+     * モルフィ(幼生)は相手に使わない。
+     * - 第1・2週: 成長体6種(第1週は0.6係数で弱体化する)
+     * - 第3週: 成熟体26種(人型成熟体14 + 動物成熟体12)
+     * - 第4週: 最終形態38種(人型最終14 + 動物最終24)
+     * 相手はどの性別でも良いため性別フィルタは不要。
+     */
+    fun opponentPoolFor(week: Int): List<MonsterForm> = when (week) {
+        1, 2 -> growthForms
+        3 -> HumanoidRoster.all.filter { it.stage == MonsterStage.INTERMEDIATE } + beastIntermediates
+        else -> HumanoidRoster.all.filter { it.stage == MonsterStage.FINAL } + animalFinals
+    }
 
     /**
      * 71体構成の進化表(v0.10)の評価。

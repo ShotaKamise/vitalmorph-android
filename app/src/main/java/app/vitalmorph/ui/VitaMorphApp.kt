@@ -70,6 +70,7 @@ import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.BattleEventKind
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
+import app.vitalmorph.domain.TournamentSchedule
 import app.vitalmorph.domain.TurnEvent
 import app.vitalmorph.domain.DexCatalog
 import app.vitalmorph.domain.DialogueChoice
@@ -795,15 +796,25 @@ private fun ArenaScreen(
     ) {
         item {
             SectionTitle("トレーナーバトル大会")
-            Text("技とアイテムを選び、CPUトレーナーとの3試合を勝ち抜こう。アイテムは大会中で共通です。")
+            Text("大会はシーズンの7・14・21・28日目に開催。技とアイテムでCPUトレーナーとの3試合を勝ち抜こう。")
         }
         if (currentForm != null && battle == null) {
+            val alreadyScored = state.weeklyPoints.containsKey(state.currentWeek)
             item {
                 ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(currentForm.accent).copy(alpha = 0.10f))) {
                     Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         MonsterVisual(currentForm, Modifier.size(190.dp), motion = MonsterMotion.VICTORY)
                         Text(currentForm.name, fontSize = 24.sp, fontWeight = FontWeight.Black)
-                        Text("4つの技と3種類のアイテムで戦います", color = Gold)
+                        if (state.isTournamentDay) {
+                            Text(
+                                if (alreadyScored) "第${state.currentWeek}週の大会は参加済み" else "今日は大会の日！",
+                                color = Gold,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        } else {
+                            Text("大会まであと ${state.daysUntilTournament}日", color = Gold, fontWeight = FontWeight.Bold)
+                            Text("第${state.currentWeek}週 トレーニング期間", style = MaterialTheme.typography.labelMedium)
+                        }
                         state.generation?.let { generation ->
                             Text(
                                 "コンディション: ${MoodEngine.moodBand(generation.mood).label}" +
@@ -814,9 +825,52 @@ private fun ArenaScreen(
                     }
                 }
             }
-            item {
-                Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onStartTournament) {
-                    Text("大会を開始する")
+            item { WeeklyPointsRow(state.weeklyPoints, state.currentWeek, state.tournamentPoints) }
+            if (!state.isTournamentDay) {
+                item {
+                    ElevatedCard {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text("今週のトレーニング成果", fontWeight = FontWeight.Black)
+                            val metrics = state.evolution.metrics
+                            ScoreBar("栄養調和", metrics.nutritionScore)
+                            ScoreBar("活動エネルギー", metrics.activityScore.coerceAtMost(100))
+                            ScoreBar("継続性", metrics.consistencyScore)
+                            Text(
+                                "大会の日まで生活を整えて、相手より強く育てよう。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+                }
+                item {
+                    Button(
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        enabled = false,
+                        onClick = onStartTournament,
+                    ) {
+                        Text("大会まであと ${state.daysUntilTournament}日")
+                    }
+                }
+            } else if (!alreadyScored) {
+                item {
+                    Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onStartTournament) {
+                        Text("大会に出場する(第${state.currentWeek}週)")
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        "第${state.currentWeek}週の結果: ${state.weeklyPoints[state.currentWeek] ?: 0}pt。" +
+                            "同じ週の再挑戦はポイント加算のない練習試合です。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+                }
+                item {
+                    OutlinedButton(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onStartTournament) {
+                        Text("練習試合をする(ポイントなし)")
+                    }
                 }
             }
         }
@@ -834,10 +888,10 @@ private fun ArenaScreen(
                     }
                 }
                 BattleOutcome.TOURNAMENT_WON, BattleOutcome.PLAYER_LOST -> {
-                    state.tournament?.let { result -> item { TournamentSummary(result, currentForm) } }
+                    state.tournament?.let { result -> item { TournamentSummary(result, currentForm, battle.practice) } }
                     item {
                         OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onStartTournament) {
-                            Text("最初から再挑戦する")
+                            Text("練習試合をする(ポイントなし)")
                         }
                     }
                 }
@@ -858,7 +912,11 @@ private fun TurnBattleStage(
     ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(form.accent).copy(alpha = 0.10f))) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(battle.roundLabel, color = Gold, fontWeight = FontWeight.Black)
+                Text(
+                    if (battle.practice) "${battle.roundLabel}(練習試合)" else "第${battle.week}週 ${battle.roundLabel}",
+                    color = Gold,
+                    fontWeight = FontWeight.Black,
+                )
                 Text("TURN ${battle.turn}", fontWeight = FontWeight.Bold)
             }
             BattleHealthBar(battle.opponentName, displayedOpponentHp, battle.opponentMaxHp, Color(0xFFB89CFF))
@@ -878,7 +936,12 @@ private fun TurnBattleStage(
                 Text("VS", color = Gold, fontWeight = FontWeight.Black, fontSize = 20.sp)
                 Box(Modifier.weight(1f).height(150.dp), contentAlignment = Alignment.TopCenter) {
                     MonsterSprite(
-                        drawableRes = MonsterArtwork.resourceForOpponent(battle.opponentName),
+                        // 相手フォームIDから姿を描画。旧スナップショット(ID空)は従来の乱択画像へフォールバック。
+                        drawableRes = if (battle.opponentFormId.isNotBlank()) {
+                            MonsterArtwork.resourceFor(battle.opponentFormId)
+                        } else {
+                            MonsterArtwork.resourceForOpponent(battle.opponentName)
+                        },
                         contentDescription = battle.opponentName,
                         accent = Color(0xFFB89CFF),
                         modifier = Modifier.fillMaxSize(),
@@ -1033,7 +1096,7 @@ private fun BattleLog(battle: TurnBattleState) {
 }
 
 @Composable
-private fun TournamentSummary(result: TournamentResult, form: MonsterForm?) {
+private fun TournamentSummary(result: TournamentResult, form: MonsterForm?, practice: Boolean) {
     ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Gold.copy(alpha = 0.12f))) {
         Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             form?.let {
@@ -1044,7 +1107,40 @@ private fun TournamentSummary(result: TournamentResult, form: MonsterForm?) {
                 )
             }
             Text(if (result.placement == 1) "CHAMPION" else "TOP ${result.placement}", color = Gold, fontWeight = FontWeight.Black)
-            Text("大会ポイント +${result.tournamentPoints}", fontSize = 20.sp)
+            if (practice) {
+                Text("練習試合(ポイント加算なし)", fontSize = 16.sp, color = Color.White.copy(alpha = 0.8f))
+            } else {
+                Text("この週の大会ポイント +${result.tournamentPoints}", fontSize = 20.sp)
+            }
+        }
+    }
+}
+
+/** 4週分の大会ポイントとシーズン平均を表示する行。 */
+@Composable
+private fun WeeklyPointsRow(weeklyPoints: Map<Int, Int>, currentWeek: Int, seasonPoints: Int) {
+    ElevatedCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("週ごとの大会ポイント", fontWeight = FontWeight.Black)
+                Text("平均 $seasonPoints / 10", color = Gold, fontWeight = FontWeight.Bold)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                (1..TournamentSchedule.WEEKS).forEach { week ->
+                    val value = weeklyPoints[week]
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "第${week}週",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (week == currentWeek) Gold else Color.White.copy(alpha = 0.7f),
+                        )
+                        Text(
+                            value?.let { "${it}pt" } ?: "-",
+                            fontWeight = if (week == currentWeek) FontWeight.Black else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
         }
     }
 }

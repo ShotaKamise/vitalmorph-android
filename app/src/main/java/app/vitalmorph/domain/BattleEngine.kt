@@ -7,10 +7,6 @@ import kotlin.random.Random
 object BattleEngine {
     private const val MAX_ENERGY = 3
     private val rounds = listOf("準々決勝", "準決勝", "決勝")
-    private val opponentNames = listOf(
-        "アイアンホーン", "クリムゾウル", "ナイトグライド",
-        "コバルトスク", "ロックバイター", "ミラージュパウ",
-    )
 
     private val healingItem = BattleItem("vita_tonic", "ヴィータトニック", "HPを40回復する")
     private val energyItem = BattleItem("core_cell", "コアセル", "エネルギーを2回復する")
@@ -35,6 +31,8 @@ object BattleEngine {
         mood: Int = MonsterGeneration.DEFAULT_MOOD,
         bond: Int = MonsterGeneration.DEFAULT_BOND,
         legacy: LegacyStats = LegacyStats(),
+        week: Int = 4,
+        practice: Boolean = false,
     ): TurnBattleState {
         val stageBonus = monster.stage.ordinal * 12
         // 継承ポイントは1ptにつき基礎能力+1%(各能力15%上限は保存時に保証済み)。
@@ -68,6 +66,8 @@ object BattleEngine {
             items = items,
             completedMatches = emptyList(),
             seed = seed,
+            week = week,
+            practice = practice,
             startEnergy = if (moodBand == MoodBand.BAD) MAX_ENERGY - 1 else MAX_ENERGY,
             startShield = moodBand == MoodBand.GREAT,
         )
@@ -104,6 +104,8 @@ object BattleEngine {
             items = state.items,
             completedMatches = state.completedMatches,
             seed = state.seed,
+            week = state.week,
+            practice = state.practice,
             startEnergy = state.playerStartEnergy,
             startShield = state.playerStartShield,
         ).copy(log = listOf("${rounds[state.roundIndex + 1]}開始！ HPが少し回復した。"))
@@ -156,13 +158,21 @@ object BattleEngine {
         items: List<BattleItemStock>,
         completedMatches: List<BattleMatch>,
         seed: Int,
+        week: Int = 4,
+        practice: Boolean = false,
         startEnergy: Int = MAX_ENERGY,
         startShield: Boolean = false,
     ): TurnBattleState {
         val difficulty = roundIndex * 6
-        val opponentHp = playerMaxHp - 8 + difficulty * 2
+        // 相手はプレイヤーと同段階のフォームからシード決定的に選び、姿もそのフォームを表示する。
+        val pool = EvolutionEngine.opponentPoolFor(week)
+        val opponentForm = pool[Math.floorMod(seed + roundIndex, pool.size)]
+        val multiplier = TournamentSchedule.weekMultiplierPercent(week)
+        // 週係数は相手側の能力にのみ掛ける(各能力は最低1)。
+        fun scaled(value: Int): Int = (value * multiplier / 100).coerceAtLeast(1)
+        val opponentHp = scaled(playerMaxHp - 8 + difficulty * 2)
         val opening = buildList {
-            add("${rounds[roundIndex]}！ ${opponentNames[Math.floorMod(seed + roundIndex, opponentNames.size)]}が現れた。")
+            add("${rounds[roundIndex]}！ ${opponentForm.name}が現れた。")
             if (startShield) add("絶好調！ コンディションバリアを展開した。")
             if (startEnergy < MAX_ENERGY) add("今日は少し元気がない…開始エネルギーが下がっている。")
         }
@@ -170,7 +180,10 @@ object BattleEngine {
             roundIndex = roundIndex,
             roundLabel = rounds[roundIndex],
             playerName = playerName,
-            opponentName = opponentNames[Math.floorMod(seed + roundIndex, opponentNames.size)],
+            opponentName = opponentForm.name,
+            opponentFormId = opponentForm.id,
+            week = week,
+            practice = practice,
             playerHp = playerHp,
             playerMaxHp = playerMaxHp,
             opponentHp = opponentHp,
@@ -180,9 +193,9 @@ object BattleEngine {
             playerAttack = playerAttack,
             playerDefense = playerDefense,
             playerSpeed = playerSpeed,
-            opponentAttack = playerAttack - 2 + difficulty,
-            opponentDefense = playerDefense - 1 + difficulty / 2,
-            opponentSpeed = playerSpeed - 2 + difficulty,
+            opponentAttack = scaled(playerAttack - 2 + difficulty),
+            opponentDefense = scaled(playerDefense - 1 + difficulty / 2),
+            opponentSpeed = scaled(playerSpeed - 2 + difficulty),
             playerGuarding = startShield,
             opponentGuarding = false,
             opponentPotions = 1,

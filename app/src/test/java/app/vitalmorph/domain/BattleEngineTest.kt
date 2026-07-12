@@ -114,6 +114,33 @@ class BattleEngineTest {
     }
 
     @Test
+    fun `higher week scales opponent stats up for the same seed`() {
+        val week1 = BattleEngine.startTournament(monster, metrics, 42, week = 1)
+        val week4 = BattleEngine.startTournament(monster, metrics, 42, week = 4)
+        assertTrue(week1.opponentAttack < week4.opponentAttack)
+        assertTrue(week1.opponentHp < week4.opponentHp)
+        assertTrue(week1.opponentDefense <= week4.opponentDefense)
+        assertTrue(week1.opponentSpeed <= week4.opponentSpeed)
+    }
+
+    @Test
+    fun `opponent form is chosen from the week pool`() {
+        for (week in 1..4) {
+            val battle = BattleEngine.startTournament(monster, metrics, 42, week = week)
+            assertTrue("opponentFormId should be set", battle.opponentFormId.isNotBlank())
+            val pool = EvolutionEngine.opponentPoolFor(week).map { it.id }
+            assertTrue("opponent must come from the week pool", battle.opponentFormId in pool)
+            assertEquals(week, battle.week)
+        }
+    }
+
+    @Test
+    fun `practice flag defaults to false and can be set`() {
+        assertEquals(false, BattleEngine.startTournament(monster, metrics, 42).practice)
+        assertEquals(true, BattleEngine.startTournament(monster, metrics, 42, practice = true).practice)
+    }
+
+    @Test
     fun `final victory produces tournament result`() {
         val initial = BattleEngine.startTournament(monster, metrics, 42).copy(
             roundIndex = 2,

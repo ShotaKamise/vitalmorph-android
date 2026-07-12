@@ -40,6 +40,24 @@ class BattleStateCodecTest {
     }
 
     @Test
+    fun `practice flag week and opponent form round trip`() {
+        val state = BattleEngine.startTournament(monster, metrics, seed = 7, week = 2, practice = true)
+        val restored = BattleStateCodec.fromJson(BattleStateCodec.toJson(state))
+        assertEquals(state, restored)
+        assertEquals(true, restored?.practice)
+        assertEquals(2, restored?.week)
+        assertEquals(state.opponentFormId, restored?.opponentFormId)
+    }
+
+    @Test
+    fun `version was bumped so old snapshots are discarded`() {
+        val state = BattleEngine.startTournament(monster, metrics, seed = 7)
+        val json = JSONObject(BattleStateCodec.toJson(state))
+        json.put("version", 1)
+        assertNull(BattleStateCodec.fromJson(json.toString()))
+    }
+
+    @Test
     fun `garbage input returns null`() {
         assertNull(BattleStateCodec.fromJson("garbage"))
     }

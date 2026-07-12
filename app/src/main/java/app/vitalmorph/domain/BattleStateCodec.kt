@@ -12,7 +12,7 @@ import org.json.JSONObject
  */
 object BattleStateCodec {
     /** 保存フォーマットのバージョン。互換性を壊す変更のたびに上げ、旧データは安全に破棄する。 */
-    const val VERSION = 1
+    const val VERSION = 2
 
     fun toJson(state: TurnBattleState): String {
         val json = JSONObject()
@@ -21,6 +21,9 @@ object BattleStateCodec {
         json.put("roundLabel", state.roundLabel)
         json.put("playerName", state.playerName)
         json.put("opponentName", state.opponentName)
+        json.put("opponentFormId", state.opponentFormId)
+        json.put("week", state.week)
+        json.put("practice", state.practice)
         json.put("playerHp", state.playerHp)
         json.put("playerMaxHp", state.playerMaxHp)
         json.put("opponentHp", state.opponentHp)
@@ -56,6 +59,9 @@ object BattleStateCodec {
             roundLabel = root.getString("roundLabel"),
             playerName = root.getString("playerName"),
             opponentName = root.getString("opponentName"),
+            opponentFormId = root.getString("opponentFormId"),
+            week = root.getInt("week"),
+            practice = root.getBoolean("practice"),
             playerHp = root.getInt("playerHp"),
             playerMaxHp = root.getInt("playerMaxHp"),
             opponentHp = root.getInt("opponentHp"),

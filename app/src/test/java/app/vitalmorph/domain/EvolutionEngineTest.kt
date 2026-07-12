@@ -162,4 +162,25 @@ class EvolutionEngineTest {
             assertTrue(HumanoidRoster.finalForm(job, MonsterSex.FEMALE).id.endsWith("_f"))
         }
     }
+
+    @Test
+    fun `opponent pools match the player growth stage per week`() {
+        // 第1・2週は成長体6種。
+        assertEquals(6, EvolutionEngine.opponentPoolFor(1).size)
+        assertEquals(6, EvolutionEngine.opponentPoolFor(2).size)
+        assertTrue(EvolutionEngine.opponentPoolFor(1).all { it.stage == MonsterStage.FAMILY })
+        // 第3週は成熟体26種(人型14 + 動物12)。
+        assertEquals(26, EvolutionEngine.opponentPoolFor(3).size)
+        assertTrue(EvolutionEngine.opponentPoolFor(3).all { it.stage == MonsterStage.INTERMEDIATE })
+        // 第4週は最終形態38種(人型14 + 動物24)。
+        assertEquals(38, EvolutionEngine.opponentPoolFor(4).size)
+        assertTrue(EvolutionEngine.opponentPoolFor(4).all { it.stage == MonsterStage.FINAL })
+    }
+
+    @Test
+    fun `morphy is never used as an opponent`() {
+        for (week in 1..4) {
+            assertTrue(EvolutionEngine.opponentPoolFor(week).none { it.id == "morphy" })
+        }
+    }
 }

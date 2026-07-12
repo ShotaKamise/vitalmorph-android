@@ -34,6 +34,7 @@ import app.vitalmorph.domain.TimeOfDay
 import app.vitalmorph.domain.TouchArea
 import app.vitalmorph.domain.TouchReactionType
 import app.vitalmorph.domain.TournamentResult
+import app.vitalmorph.domain.TournamentSchedule
 import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TrainerProgress
 import app.vitalmorph.domain.TrainerRank
@@ -75,6 +76,11 @@ data class GameUiState(
     val tournament: TournamentResult? = null,
     val battle: TurnBattleState? = null,
     val tournamentPoints: Int = 0,
+    val isTournamentDay: Boolean = false,
+    val currentWeek: Int = 1,
+    val daysUntilTournament: Int = 0,
+    val weeklyPoints: Map<Int, Int> = emptyMap(),
+    val isPracticeBattle: Boolean = false,
     val trainerName: String? = null,
     val generation: MonsterGeneration? = null,
     val pastGenerations: List<MonsterGeneration> = emptyList(),
@@ -203,6 +209,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // シーズン途中の既存世代は静かに既読化して、今後演出が出ないようにする。
                 store.setHatchShownGenerationId(generation.generationId)
             }
+            // 週末大会(U9): シーズン日から大会の日・週・カウントダウンを求める。
+            val seasonDay = evolution?.seasonDay ?: 1
+            val weeklyPoints = store.weeklyTournamentPoints()
             mutableState.update {
                 it.copy(
                     loading = false,
@@ -220,6 +229,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     trainerProgress = stored.trainerProgress,
                     trainerRank = TrainerRankEngine.rankFor(stored.trainerProgress),
                     tournamentPoints = stored.tournamentPoints,
+                    isTournamentDay = TournamentSchedule.isTournamentDay(seasonDay),
+                    currentWeek = TournamentSchedule.weekOf(seasonDay),
+                    daysUntilTournament = TournamentSchedule.daysUntilTournament(seasonDay),
+                    weeklyPoints = weeklyPoints,
+                    isPracticeBattle = restoredBattle?.practice ?: false,
                     trainerName = trainerName,
                     generation = generation,
                     pastGenerations = pastGenerations,
@@ -381,16 +395,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun startTournament() {
         val current = mutableState.value
         val evolution = current.evolution ?: return
+        // 大会はシーズン日7・14・21・28のみ。平日は開始できない。
+        if (!current.isTournamentDay) {
+            mutableState.update { it.copy(message = "大会はシーズンの7・14・21・28日目に開催されます") }
+            return
+        }
+        // 今週まだ採点していなければ本戦(採点)、採点済みなら練習試合(ポイント加算なし)。
+        val scored = current.currentWeek !in store.scoredWeeks()
+        val practice = !scored
+        // 練習試合はシードを毎回ずらし、相手や展開が固定化しないようにする。
+        val practiceSalt = if (practice) System.currentTimeMillis().toInt() else 0
         val battle = BattleEngine.startTournament(
             evolution.form,
             evolution.metrics,
-            seed = current.seasonStart.toEpochDay().toInt() + evolution.seasonDay + current.tournamentPoints,
+            seed = current.seasonStart.toEpochDay().toInt() + evolution.seasonDay + current.tournamentPoints + practiceSalt,
             mood = current.generation?.mood ?: MonsterGeneration.DEFAULT_MOOD,
             bond = current.generation?.bond ?: MonsterGeneration.DEFAULT_BOND,
             legacy = current.legacyStats,
+            week = current.currentWeek,
+            practice = practice,
         )
         persistBattle(battle)
-        mutableState.update { it.copy(battle = battle, tournament = null) }
+        mutableState.update { it.copy(battle = battle, tournament = null, isPracticeBattle = practice) }
     }
 
     /**
@@ -494,14 +520,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val battle = current.battle ?: return
         val updated = action(battle)
         val result = BattleEngine.resultFor(updated)
-        val bestPoints = result?.let { maxOf(current.tournamentPoints, it.tournamentPoints) }
-        if (bestPoints != null) store.saveTournamentPoints(bestPoints)
+        // 本戦(練習試合でない)が決着したときのみ、その週のポイントを記録する。
+        if (result != null && !updated.practice) {
+            store.saveWeeklyTournamentPoints(updated.week, result.tournamentPoints)
+        }
         persistBattle(updated)
+        val weeklyPoints = store.weeklyTournamentPoints()
+        val seasonPoints = TournamentSchedule.seasonTournamentPoints(weeklyPoints)
         mutableState.update {
             it.copy(
                 battle = updated,
                 tournament = result ?: it.tournament,
-                tournamentPoints = bestPoints ?: it.tournamentPoints,
+                tournamentPoints = seasonPoints,
+                weeklyPoints = weeklyPoints,
             )
         }
     }

@@ -1,6 +1,7 @@
 package app.vitalmorph.data
 
 import android.content.Context
+import app.vitalmorph.domain.TournamentSchedule
 import app.vitalmorph.domain.TrainerProgress
 import app.vitalmorph.domain.UserGoals
 import app.vitalmorph.domain.WorkoutTag
@@ -37,7 +38,8 @@ class GameStore(context: Context) {
         ),
         demoMode = preferences.getBoolean("demo_mode", false),
         demoDayOffset = preferences.getInt("demo_day_offset", 0),
-        tournamentPoints = preferences.getInt("tournament_points", 0),
+        // 大会ポイントは週ごとの記録(最大10)を4週平均した値(U9)。
+        tournamentPoints = TournamentSchedule.seasonTournamentPoints(weeklyTournamentPoints()),
     )
 
     fun completeOnboarding(goals: UserGoals, demoMode: Boolean) {
@@ -54,9 +56,24 @@ class GameStore(context: Context) {
             .apply()
     }
 
-    fun saveTournamentPoints(points: Int) {
-        preferences.edit().putInt("tournament_points", points).apply()
+    /** 週ごとの大会順位ポイント(week -> points)。未参加の週は含まれない。 */
+    fun weeklyTournamentPoints(): Map<Int, Int> {
+        val json = JSONObject(preferences.getString("weekly_tournament_points", "{}") ?: "{}")
+        return json.keys().asSequence().mapNotNull { key ->
+            runCatching { key.toInt() to json.getInt(key) }.getOrNull()
+        }.toMap()
     }
+
+    /** 週の大会ポイントを記録する。同週に既記録があれば大きい方を残す(再スコア対策)。 */
+    fun saveWeeklyTournamentPoints(week: Int, points: Int) {
+        val json = JSONObject(preferences.getString("weekly_tournament_points", "{}") ?: "{}")
+        val existing = if (json.has(week.toString())) json.getInt(week.toString()) else 0
+        json.put(week.toString(), maxOf(existing, points))
+        preferences.edit().putString("weekly_tournament_points", json.toString()).apply()
+    }
+
+    /** 今シーズンで既に採点済み(参加済み)の週。 */
+    fun scoredWeeks(): Set<Int> = weeklyTournamentPoints().keys
 
     /**
      * 進行中の大会状態(JSONスナップショット)を保存する。nullで消去する。
@@ -104,7 +121,9 @@ class GameStore(context: Context) {
             .putInt("completed_seasons", preferences.getInt("completed_seasons", 0) + 1)
             .putString("season_start", LocalDate.now().toString())
             .putInt("demo_day_offset", 0)
-            .putInt("tournament_points", 0)
+            // 週ごとの大会ポイントはシーズン完了でリセットする。
+            .remove("weekly_tournament_points")
+            .remove("tournament_points")
             .apply()
     }
 

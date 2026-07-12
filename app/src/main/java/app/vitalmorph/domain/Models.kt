@@ -175,6 +175,12 @@ data class TurnBattleState(
     val roundLabel: String,
     val playerName: String,
     val opponentName: String,
+    /** 相手フォームのID(姿の描画に使う)。旧スナップショットとの互換のため既定は空。 */
+    val opponentFormId: String = "",
+    /** 大会の週(1..4)。相手能力の週係数と週ポイント記録に使う。既定は第4週。 */
+    val week: Int = 4,
+    /** 練習試合(同週の再挑戦)かどうか。trueならポイントを加算しない。 */
+    val practice: Boolean = false,
     val playerHp: Int,
     val playerMaxHp: Int,
     val opponentHp: Int,
