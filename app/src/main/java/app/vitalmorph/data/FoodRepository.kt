@@ -1,3 +1,4 @@
+// v1.1で食事入力UIは削除。テーブルとともに将来の再有効化に備えて保持。
 package app.vitalmorph.data
 
 import app.vitalmorph.data.db.CustomFoodEntity
@@ -19,6 +20,7 @@ import java.util.UUID
  * Health Connectへの書き込みは呼び出し側([app.vitalmorph.ui.GameViewModel])が
  * [FoodEntry.clientRecordId] を使って行う。
  */
+@Suppress("unused")
 class FoodRepository(
     private val database: VitaMorphDatabase,
     private val now: () -> Long = System::currentTimeMillis,

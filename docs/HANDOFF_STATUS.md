@@ -14,6 +14,12 @@
 - T6 ドキュメント整備とロスター更新: 実施中。ロスターを71体構成へ更新、READMEを現機能へ更新、本書を整理。
 - T7 v1.0.0リリース準備: 完了。versionCode 12 / versionName 1.0.0。署名済みAPKの公開はタグ(例: v1.0.0)をプッシュするとGitHub Actionsのreleaseワークフローが実行される(署名シークレットが必要なためタグ付けはユーザー操作)。
 
+## v1.1 対応状況(RELEASE_1_1_PLAN.md)
+
+- U2 食事入力機能の削除・あすけん一本化: 完了。アプリ内の食事入力UI(食事タブ・MealsScreen・BarcodeScannerScreen・OpenFoodFactsRepository)を削除し、栄養はHealth Connect(あすけん経由)の読み取りのみへ戻した。
+  - 権限縮小: `INTERNET` / `CAMERA` / `WRITE_NUTRITION` を撤去(CameraX・ML Kit依存も削除)。HealthConnectRepositoryは読み取り専用に。
+  - データ保護: Roomのエンティティ・DAO・マイグレーション(v1〜v9)と `app/schemas/**` はすべて保持。`FoodRepository` とドメイン(`NutritionResolver` 等)も将来の再有効化に備えて残置(未使用)。旧prefsキー(nutrition_source等)は消さずオーファン化。
+
 ## 現在の完成範囲
 
 - Androidアプリ基盤
@@ -46,6 +52,7 @@
 - (v0.7 / Phase 4) 継承ポイントのバトル反映(1pt=+1%、各能力15%上限、減らない)
 - (v0.7 / Phase 4) トレーナータブの系譜画面(歴代の性別、最終形態、大会順位、継承内容)
 - (v0.7 / Phase 4) 世代記録の拡張(Room v3: finalFormId、finalPlacement、awarded*列)
+- (v1.1で入力機能は削除、履歴として保持) 以下のv0.8/Phase 5・v0.9/Phase 6の食事入力・外部検索・書き込み機能は、あすけん一本化に伴い削除済み。テーブルとドメインは保持。
 - (v0.8 / Phase 5) 食事タブ(朝昼夕間の入力、代表食品カタログ約60品目、手入力、自作食品、お気に入り、最近の記録、前日コピー)
 - (v0.8 / Phase 5) 日次サマリー(目標との差、PFCバー)と直近7日のエネルギーグラフ
 - (v0.8 / Phase 5) Health ConnectへのNutritionRecord書き込み(Client Record ID付き、削除も同期)

@@ -35,7 +35,6 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -68,22 +67,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
-import app.vitalmorph.data.ExternalFood
-import app.vitalmorph.domain.DayNutritionChoice
 import app.vitalmorph.domain.DexCatalog
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.EvolutionRoute
-import app.vitalmorph.domain.FoodCatalog
-import app.vitalmorph.domain.FoodCatalogItem
-import app.vitalmorph.domain.FoodEntry
 import app.vitalmorph.domain.LegacyStats
-import app.vitalmorph.domain.MealSlot
 import app.vitalmorph.domain.MonsterGeneration
-import app.vitalmorph.domain.NutritionSource
-import app.vitalmorph.domain.Recipe
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterForm
@@ -172,20 +163,6 @@ fun VitaMorphApp(
                     onDialogueChoice = viewModel::onDialogueChoice,
                     onTalkAgain = viewModel::talkAgain,
                     onStartMiniGame = viewModel::startMiniGame,
-                    onAddCatalogFood = viewModel::addCatalogFood,
-                    onAddManualFood = viewModel::addFood,
-                    onDeleteFood = viewModel::deleteFood,
-                    onCopyYesterdayMeals = viewModel::copyYesterdayMeals,
-                    onToggleFoodFavorite = viewModel::toggleFoodFavorite,
-                    onSetNutritionSource = viewModel::setNutritionSource,
-                    onSearchExternalFood = viewModel::searchExternalFood,
-                    onLookupBarcode = viewModel::lookupBarcode,
-                    onAddExternalFood = viewModel::addExternalFood,
-                    onClearExternalResults = viewModel::clearExternalResults,
-                    onSetTodayNutritionChoice = viewModel::setTodayNutritionChoice,
-                    onSaveRecipe = viewModel::saveRecipe,
-                    onAddRecipeToMeal = viewModel::addRecipeToMeal,
-                    onDeleteRecipe = viewModel::deleteRecipe,
                 )
             }
         }
@@ -300,20 +277,6 @@ private fun MainGameScreen(
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
-    onAddCatalogFood: (MealSlot, FoodCatalogItem, Double) -> Unit,
-    onAddManualFood: (MealSlot, String, Double, String, Double, Double, Double, Double, Boolean, Double, Double, Double) -> Unit,
-    onDeleteFood: (FoodEntry) -> Unit,
-    onCopyYesterdayMeals: () -> Unit,
-    onToggleFoodFavorite: (String) -> Unit,
-    onSetNutritionSource: (NutritionSource) -> Unit,
-    onSearchExternalFood: (String) -> Unit,
-    onLookupBarcode: (String) -> Unit,
-    onAddExternalFood: (MealSlot, ExternalFood, Double) -> Unit,
-    onClearExternalResults: () -> Unit,
-    onSetTodayNutritionChoice: (DayNutritionChoice) -> Unit,
-    onSaveRecipe: (String, List<Pair<FoodCatalogItem, Double>>) -> Unit,
-    onAddRecipeToMeal: (MealSlot, Recipe) -> Unit,
-    onDeleteRecipe: (Recipe) -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -367,26 +330,10 @@ private fun MainGameScreen(
                     onTalkAgain,
                     onStartMiniGame,
                 )
-                AppTab.MEALS -> MealsScreen(
-                    state = state,
-                    onAddCatalog = onAddCatalogFood,
-                    onAddManual = onAddManualFood,
-                    onDelete = onDeleteFood,
-                    onCopyYesterday = onCopyYesterdayMeals,
-                    onToggleFavorite = onToggleFoodFavorite,
-                    onSearchExternal = onSearchExternalFood,
-                    onLookupBarcode = onLookupBarcode,
-                    onAddExternal = onAddExternalFood,
-                    onClearExternal = onClearExternalResults,
-                    onSetTodayChoice = onSetTodayNutritionChoice,
-                    onSaveRecipe = onSaveRecipe,
-                    onAddRecipeToMeal = onAddRecipeToMeal,
-                    onDeleteRecipe = onDeleteRecipe,
-                )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution, state.generation?.route)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
                 AppTab.TRAINER -> TrainerScreen(state)
-                AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset, onSetTrainerName, onSetNutritionSource)
+                AppTab.SETTINGS -> SettingsScreen(state, onAdvanceDemo, onCompleteSeason, onReset, onSetTrainerName)
             }
         }
     }
@@ -1176,7 +1123,6 @@ private fun SettingsScreen(
     onCompleteSeason: () -> Unit,
     onReset: () -> Unit,
     onSetTrainerName: (String) -> Unit,
-    onSetNutritionSource: (NutritionSource) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1212,40 +1158,12 @@ private fun SettingsScreen(
         item {
             ElevatedCard {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("栄養データの優先元", fontWeight = FontWeight.Bold)
-                    Text(
-                        "あすけん等の記録とVitaMorphの記録がある日に、どちらを育成へ使うかを選びます。合算はしません。",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    NutritionSource.entries.forEach { source ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = state.nutritionSource == source,
-                                onClick = { onSetNutritionSource(source) },
-                            )
-                            Column {
-                                Text(source.label)
-                                Text(source.description, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            ElevatedCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("プライバシー", fontWeight = FontWeight.Bold)
-                    Text("健康データは端末内でのみ処理し、外部へ送信しません。")
+                    Text("健康データは端末内でのみ処理し、外部へ送信しません。ゲームはネットワーク権限を要求しません。")
                     Text(
-                        "通信が発生するのは食品のネット検索(Open Food Facts)だけで、送信されるのは検索キーワードまたはバーコード番号のみです。バーコードの読み取り自体は端末内で処理されます。",
+                        "食事の記録はあすけん等のアプリで行い、VitaMorphはHealth Connect経由で読み取って育成へ反映します。",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(
-                        "VitaMorphで記録した食事は、許可があればHealth Connectにも保存されます(このアプリのData Origin付き)。",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(FoodCatalog.ATTRIBUTION, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

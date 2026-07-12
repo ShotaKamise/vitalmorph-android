@@ -1,8 +1,6 @@
 package app.vitalmorph.data
 
 import android.content.Context
-import app.vitalmorph.domain.DayNutritionChoice
-import app.vitalmorph.domain.NutritionSource
 import app.vitalmorph.domain.TrainerProgress
 import app.vitalmorph.domain.UserGoals
 import app.vitalmorph.domain.WorkoutTag
@@ -17,8 +15,6 @@ data class StoredGameState(
     val demoMode: Boolean,
     val demoDayOffset: Int,
     val tournamentPoints: Int,
-    val nutritionSource: NutritionSource,
-    val nutritionDayChoices: Map<LocalDate, DayNutritionChoice>,
 )
 
 class GameStore(context: Context) {
@@ -42,30 +38,7 @@ class GameStore(context: Context) {
         demoMode = preferences.getBoolean("demo_mode", false),
         demoDayOffset = preferences.getInt("demo_day_offset", 0),
         tournamentPoints = preferences.getInt("tournament_points", 0),
-        nutritionSource = preferences.getString("nutrition_source", null)
-            ?.let { runCatching { NutritionSource.valueOf(it) }.getOrNull() }
-            ?: NutritionSource.VITALMORPH_FIRST,
-        nutritionDayChoices = nutritionDayChoices(),
     )
-
-    /** 栄養データの優先元(2026-07-12ユーザー決定の既定はVitaMorph優先)。 */
-    fun setNutritionSource(source: NutritionSource) {
-        preferences.edit().putString("nutrition_source", source.name).apply()
-    }
-
-    /** 「日ごとに選択」モードでの、その日の優先元を保存する。 */
-    fun setNutritionDayChoice(date: LocalDate, choice: DayNutritionChoice) {
-        val json = JSONObject(preferences.getString("nutrition_day_choices", "{}") ?: "{}")
-        json.put(date.toString(), choice.name)
-        preferences.edit().putString("nutrition_day_choices", json.toString()).apply()
-    }
-
-    private fun nutritionDayChoices(): Map<LocalDate, DayNutritionChoice> {
-        val json = JSONObject(preferences.getString("nutrition_day_choices", "{}") ?: "{}")
-        return json.keys().asSequence().mapNotNull { key ->
-            runCatching { LocalDate.parse(key) to DayNutritionChoice.valueOf(json.getString(key)) }.getOrNull()
-        }.toMap()
-    }
 
     fun completeOnboarding(goals: UserGoals, demoMode: Boolean) {
         preferences.edit()
