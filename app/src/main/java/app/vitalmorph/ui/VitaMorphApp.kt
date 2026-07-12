@@ -55,19 +55,27 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
+import app.vitalmorph.domain.DialogueChoice
+import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.MonsterForm
 import app.vitalmorph.domain.MonsterSex
 import app.vitalmorph.domain.MonsterStage
+import app.vitalmorph.domain.MoodEngine
+import app.vitalmorph.domain.TouchArea
+import app.vitalmorph.domain.TouchReactionType
 import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TournamentResult
 import app.vitalmorph.domain.TurnBattleState
 import app.vitalmorph.domain.TrainerRank
 import app.vitalmorph.domain.UserGoals
 import app.vitalmorph.domain.WorkoutTag
+import kotlinx.coroutines.delay
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
@@ -128,6 +136,10 @@ fun VitaMorphApp(
                     onCompleteSeason = viewModel::completeSeason,
                     onReset = viewModel::resetAll,
                     onSetTrainerName = viewModel::setTrainerName,
+                    onTouch = viewModel::onMonsterTouched,
+                    onReactionShown = viewModel::clearTouchReaction,
+                    onDialogueChoice = viewModel::onDialogueChoice,
+                    onTalkAgain = viewModel::talkAgain,
                 )
             }
         }
@@ -236,6 +248,10 @@ private fun MainGameScreen(
     onCompleteSeason: () -> Unit,
     onReset: () -> Unit,
     onSetTrainerName: (String) -> Unit,
+    onTouch: (TouchArea) -> Unit,
+    onReactionShown: () -> Unit,
+    onDialogueChoice: (DialogueChoice) -> Unit,
+    onTalkAgain: () -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -276,7 +292,17 @@ private fun MainGameScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.selectedTab) {
-                AppTab.HOME -> HomeScreen(state, onRequestHealthPermissions, onRefresh, onWorkoutTag, onSetTrainerName)
+                AppTab.HOME -> HomeScreen(
+                    state,
+                    onRequestHealthPermissions,
+                    onRefresh,
+                    onWorkoutTag,
+                    onSetTrainerName,
+                    onTouch,
+                    onReactionShown,
+                    onDialogueChoice,
+                    onTalkAgain,
+                )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
                 AppTab.TRAINER -> TrainerScreen(state)
@@ -293,6 +319,10 @@ private fun HomeScreen(
     onRefresh: () -> Unit,
     onWorkoutTag: (WorkoutTag) -> Unit,
     onSetTrainerName: (String) -> Unit,
+    onTouch: (TouchArea) -> Unit,
+    onReactionShown: () -> Unit,
+    onDialogueChoice: (DialogueChoice) -> Unit,
+    onTalkAgain: () -> Unit,
 ) {
     val evolution = state.evolution ?: return
     val todayData = state.days.lastOrNull()
@@ -301,7 +331,28 @@ private fun HomeScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { MonsterHero(evolution, state.generation?.sex) }
+        item {
+            MonsterHero(
+                evolution = evolution,
+                sex = state.generation?.sex,
+                mood = state.generation?.mood,
+                bond = state.generation?.bond,
+                touchReaction = state.touchReaction,
+                onTouch = onTouch,
+                onReactionShown = onReactionShown,
+            )
+        }
+        state.dialogue?.let { dialogue ->
+            item {
+                DialogueCard(
+                    monsterName = evolution.form.name,
+                    dialogue = dialogue,
+                    reply = state.dialogueReply,
+                    onChoice = onDialogueChoice,
+                    onTalkAgain = onTalkAgain,
+                )
+            }
+        }
         if (state.trainerName == null) {
             item {
                 ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = SurfaceHigh)) {
@@ -364,14 +415,59 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun MonsterHero(evolution: EvolutionResult, sex: MonsterSex? = null) {
+private fun MonsterHero(
+    evolution: EvolutionResult,
+    sex: MonsterSex? = null,
+    mood: Int? = null,
+    bond: Int? = null,
+    touchReaction: TouchReactionType? = null,
+    onTouch: ((TouchArea) -> Unit)? = null,
+    onReactionShown: () -> Unit = {},
+) {
+    // タッチ反応は少し表示してから通常モーションへ戻す。
+    LaunchedEffect(touchReaction) {
+        if (touchReaction != null && touchReaction != TouchReactionType.NONE) {
+            delay(1_400)
+            onReactionShown()
+        }
+    }
+    // TOUCH_HAPPY等の専用モーションはCodex制作待ちのため、既存モーションから選択する
+    // (docs/MONSTER_ASSET_CONTRACT.md)。
+    val motion = when (touchReaction) {
+        TouchReactionType.HAPPY -> MonsterMotion.VICTORY
+        TouchReactionType.ANNOYED -> MonsterMotion.HIT
+        else -> MonsterMotion.IDLE
+    }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(containerColor = Color(evolution.form.accent).copy(alpha = 0.12f)),
     ) {
         Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(evolution.form.stage.label, color = Color(evolution.form.accent), fontWeight = FontWeight.Bold)
-            MonsterVisual(evolution.form, Modifier.size(210.dp))
+            Box(
+                modifier = Modifier
+                    .size(210.dp)
+                    .pointerInput(onTouch != null) {
+                        detectTapGestures { offset ->
+                            // 上半分を頭、下半分を体としてタッチ部位を判定する。
+                            val area = if (offset.y < size.height / 2f) TouchArea.HEAD else TouchArea.BODY
+                            onTouch?.invoke(area)
+                        }
+                    },
+            ) {
+                MonsterVisual(evolution.form, Modifier.fillMaxSize(), motion = motion)
+            }
+            val reactionLabel = when (touchReaction) {
+                TouchReactionType.HAPPY -> "うれしそうにしている!"
+                TouchReactionType.SHY -> "少し照れているみたい…"
+                TouchReactionType.ANNOYED -> "ちょっと嫌がっている…そっとしておこう。"
+                else -> null
+            }
+            if (reactionLabel != null) {
+                Text(reactionLabel, color = Gold, style = MaterialTheme.typography.labelMedium)
+            } else if (onTouch != null) {
+                Text("タッチしてふれあおう", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelMedium)
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(evolution.form.name, fontSize = 28.sp, fontWeight = FontWeight.Black)
                 sex?.let {
@@ -385,6 +481,27 @@ private fun MonsterHero(evolution: EvolutionResult, sex: MonsterSex? = null) {
             }
             Text(evolution.form.role, color = Gold)
             Text(evolution.form.description, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+            if (mood != null && bond != null) {
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("機嫌・${MoodEngine.moodBand(mood).label}", style = MaterialTheme.typography.labelMedium)
+                        LinearProgressIndicator(
+                            progress = { mood / 100f },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            color = Mint,
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("絆・${MoodEngine.bondBand(bond).label}", style = MaterialTheme.typography.labelMedium)
+                        LinearProgressIndicator(
+                            progress = { bond / 100f },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            color = Gold,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(16.dp))
             val progress = ((evolution.seasonDay - 1) % 7 + 1) / 7f
             LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
@@ -393,6 +510,31 @@ private fun MonsterHero(evolution: EvolutionResult, sex: MonsterSex? = null) {
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(top = 8.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun DialogueCard(
+    monsterName: String,
+    dialogue: DialogueLine,
+    reply: String?,
+    onChoice: (DialogueChoice) -> Unit,
+    onTalkAgain: () -> Unit,
+) {
+    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = SurfaceHigh)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(monsterName, color = Mint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text(reply ?: dialogue.text)
+            if (reply == null) {
+                dialogue.choices.forEach { choice ->
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { onChoice(choice) }) {
+                        Text(choice.text)
+                    }
+                }
+            } else {
+                OutlinedButton(onClick = onTalkAgain) { Text("また話す") }
+            }
         }
     }
 }
@@ -418,7 +560,7 @@ private fun EvolutionScreen(evolution: EvolutionResult?) {
     ) {
         item {
             SectionTitle("現在の進化経路")
-            Text("直近7日を70%、それ以前を30%として最終進化を判定します。")
+            Text("第1週の生活で系統、第2週の傾向で職業、第3週の記録と機嫌・絆で最終形態が決まります。")
         }
         items(evolution.path) { form ->
             ElevatedCard {

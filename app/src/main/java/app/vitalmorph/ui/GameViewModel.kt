@@ -11,11 +11,21 @@ import app.vitalmorph.data.ProfileRepository
 import app.vitalmorph.data.db.VitaMorphDatabase
 import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.DailyHealthData
+import app.vitalmorph.domain.DialogueChoice
+import app.vitalmorph.domain.DialogueContext
+import app.vitalmorph.domain.DialogueEngine
+import app.vitalmorph.domain.DialogueLine
 import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.InteractionEngine
+import app.vitalmorph.domain.InteractionState
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MonsterGeneration
+import app.vitalmorph.domain.MoodEngine
 import app.vitalmorph.domain.SexAssigner
+import app.vitalmorph.domain.TimeOfDay
+import app.vitalmorph.domain.TouchArea
+import app.vitalmorph.domain.TouchReactionType
 import app.vitalmorph.domain.TournamentResult
 import app.vitalmorph.domain.TrainerNameRules
 import app.vitalmorph.domain.TrainerProgress
@@ -29,7 +39,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 
 enum class AppTab(val label: String, val symbol: String) {
     HOME("育成", "●"),
@@ -58,6 +71,10 @@ data class GameUiState(
     val trainerName: String? = null,
     val generation: MonsterGeneration? = null,
     val legacyStats: LegacyStats = LegacyStats(),
+    val interaction: InteractionState = InteractionState(),
+    val dialogue: DialogueLine? = null,
+    val dialogueReply: String? = null,
+    val touchReaction: TouchReactionType? = null,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -92,9 +109,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 else -> emptyList()
             }
             // 性別・機嫌・絆が進化ルートへ影響するため、世代を先に確定してから進化を評価する。
-            val generation = if (stored.onboardingComplete) {
+            var generation = if (stored.onboardingComplete) {
                 runCatching { profiles.ensureCurrentGeneration(stored) }.getOrNull()
             } else null
+            var interaction = runCatching { profiles.interactionState() }.getOrDefault(InteractionState())
+
+            // 日付が変わっていたら、前日の記録・交流に応じた機嫌の日次変化を1回だけ適用する。
+            val lastReset = interaction.lastDailyResetDate
+            if (generation != null && lastReset != null && today.isAfter(lastReset)) {
+                val yesterday = today.minusDays(1)
+                val recordedYesterday = rawDays.any { it.date == yesterday && (it.hasNutrition || it.hasActivity) }
+                val interactedYesterday = interaction.lastInteractionAt > 0 &&
+                    Instant.ofEpochMilli(interaction.lastInteractionAt)
+                        .atZone(ZoneId.systemDefault()).toLocalDate() == yesterday
+                val delta = MoodEngine.dailyMoodDelta(recordedYesterday, interactedYesterday)
+                if (delta != 0) {
+                    generation = MoodEngine.applyDelta(generation, delta, 0)
+                    runCatching { profiles.updateMoodBond(generation) }
+                }
+            }
+            val freshInteraction = InteractionEngine.resetIfNewDay(interaction, today)
+            if (freshInteraction != interaction) {
+                interaction = freshInteraction
+                runCatching { profiles.saveInteractionState(interaction) }
+            }
+
             val evolution = if (stored.onboardingComplete) {
                 EvolutionEngine.evaluate(
                     rawDays,
@@ -108,6 +147,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             } else null
             val trainerName = runCatching { profiles.trainerProfile()?.name }.getOrNull()
             val legacyStats = runCatching { profiles.legacyStats() }.getOrDefault(LegacyStats())
+            val dialogue = dialogueFor(trainerName, evolution, generation, rawDays, stored.goals, today)
             mutableState.update {
                 it.copy(
                     loading = false,
@@ -126,6 +166,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     trainerName = trainerName,
                     generation = generation,
                     legacyStats = legacyStats,
+                    interaction = interaction,
+                    dialogue = dialogue,
+                    dialogueReply = null,
+                    touchReaction = null,
                 )
             }
         }
@@ -164,6 +208,107 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun setWorkoutTag(tag: WorkoutTag) {
         store.setTodayWorkoutTag(mutableState.value.today, tag)
         refresh()
+    }
+
+    /** モンスターをタッチしたとき。部位判定はUI側、反応と報酬はInteractionEngineが決める。 */
+    fun onMonsterTouched(area: TouchArea) {
+        val current = mutableState.value
+        val generation = current.generation ?: return
+        val result = InteractionEngine.onTouch(
+            state = current.interaction,
+            now = System.currentTimeMillis(),
+            today = current.today,
+            area = area,
+            mood = generation.mood,
+        )
+        if (result.reaction == TouchReactionType.NONE) return
+        val updated = MoodEngine.applyDelta(generation, result.moodDelta, result.bondDelta)
+        viewModelScope.launch {
+            runCatching {
+                profiles.saveInteractionState(result.state)
+                if (updated != generation) profiles.updateMoodBond(updated)
+            }
+        }
+        mutableState.update {
+            it.copy(interaction = result.state, generation = updated, touchReaction = result.reaction)
+        }
+    }
+
+    /** タッチ反応の表示が終わったらモーションを通常へ戻す。 */
+    fun clearTouchReaction() {
+        mutableState.update { it.copy(touchReaction = null) }
+    }
+
+    /** 会話の選択肢を選んだとき。1日の上限内なら機嫌・絆へ反映する。 */
+    fun onDialogueChoice(choice: DialogueChoice) {
+        val current = mutableState.value
+        val generation = current.generation ?: return
+        val result = InteractionEngine.onConversation(
+            state = current.interaction,
+            now = System.currentTimeMillis(),
+            today = current.today,
+        )
+        val updated = if (result.rewarded) {
+            MoodEngine.applyDelta(generation, choice.moodDelta, choice.bondDelta)
+        } else generation
+        viewModelScope.launch {
+            runCatching {
+                profiles.saveInteractionState(result.state)
+                if (updated != generation) profiles.updateMoodBond(updated)
+            }
+        }
+        mutableState.update {
+            it.copy(interaction = result.state, generation = updated, dialogueReply = choice.reply)
+        }
+    }
+
+    /** 新しい話題で会話を生成し直す。 */
+    fun talkAgain() {
+        dialogueSeedBump += 1
+        val current = mutableState.value
+        mutableState.update {
+            it.copy(
+                dialogue = dialogueFor(
+                    current.trainerName,
+                    current.evolution,
+                    current.generation,
+                    current.days,
+                    current.goals,
+                    current.today,
+                ),
+                dialogueReply = null,
+            )
+        }
+    }
+
+    private var dialogueSeedBump = 0
+
+    private fun dialogueFor(
+        trainerName: String?,
+        evolution: EvolutionResult?,
+        generation: MonsterGeneration?,
+        days: List<DailyHealthData>,
+        goals: UserGoals,
+        today: LocalDate,
+    ): DialogueLine? {
+        if (evolution == null || generation == null) return null
+        val timeOfDay = TimeOfDay.fromHour(LocalTime.now().hour)
+        val todayData = days.lastOrNull { it.date == today }
+        val context = DialogueContext(
+            trainerName = trainerName,
+            stage = evolution.form.stage,
+            mood = generation.mood,
+            bond = generation.bond,
+            timeOfDay = timeOfDay,
+            seasonDay = evolution.seasonDay,
+            recordedToday = todayData?.let { it.hasNutrition || it.hasActivity } ?: false,
+            stepsToday = todayData?.steps ?: 0,
+            stepGoal = goals.dailySteps,
+            exerciseMinutesToday = todayData?.exerciseMinutes ?: 0,
+            lastTournamentWon = mutableState.value.tournament?.let { it.placement == 1 },
+        )
+        val seed = (today.toEpochDay() + timeOfDay.ordinal * 7 + dialogueSeedBump).toInt()
+        return DialogueEngine.greeting(context, seed)
     }
 
     fun startTournament() {
