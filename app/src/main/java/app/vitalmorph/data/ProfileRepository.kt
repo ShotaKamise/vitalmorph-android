@@ -71,16 +71,38 @@ class ProfileRepository(
     }
 
     /**
-     * シーズン完了時に現在世代を閉じる。
+     * シーズン完了時に現在世代を閉じ、系譜用の記録(最終形態・大会順位・継承内容)を残す。
      * 次の世代は、次回の [ensureCurrentGeneration] が新しいseasonStartを検出して
-     * ランダムな性別で孵化する。
+     * ランダムな性別で孵化する(機嫌・絆は初期値に戻る)。
      */
-    suspend fun closeCurrentGeneration(endDate: LocalDate) {
+    suspend fun closeCurrentGeneration(
+        endDate: LocalDate,
+        finalFormId: String? = null,
+        finalPlacement: Int? = null,
+        awardedHp: Int = 0,
+        awardedAttack: Int = 0,
+        awardedDefense: Int = 0,
+        awardedSpeed: Int = 0,
+    ) {
         val dao = database.monsterGenerationDao()
         dao.current()?.let { open ->
-            dao.update(open.copy(seasonEnd = endDate.toString()))
+            dao.update(
+                open.copy(
+                    seasonEnd = endDate.toString(),
+                    finalFormId = finalFormId ?: open.finalFormId,
+                    finalPlacement = finalPlacement ?: open.finalPlacement,
+                    awardedHp = awardedHp,
+                    awardedAttack = awardedAttack,
+                    awardedDefense = awardedDefense,
+                    awardedSpeed = awardedSpeed,
+                ),
+            )
         }
     }
+
+    /** すべての世代(進行中を含む)を世代番号順で返す。系譜画面用。 */
+    suspend fun allGenerations(): List<MonsterGeneration> =
+        database.monsterGenerationDao().all().map { it.toDomain() }
 
     /**
      * 世代の機嫌・絆を保存する。同じ世代のみ更新し、性別や開始日は変更しない。

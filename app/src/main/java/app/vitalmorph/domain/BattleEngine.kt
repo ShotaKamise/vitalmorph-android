@@ -34,12 +34,15 @@ object BattleEngine {
         seed: Int,
         mood: Int = MonsterGeneration.DEFAULT_MOOD,
         bond: Int = MonsterGeneration.DEFAULT_BOND,
+        legacy: LegacyStats = LegacyStats(),
     ): TurnBattleState {
         val stageBonus = monster.stage.ordinal * 12
-        val maxHp = 120 + metrics.consistencyScore / 2 + metrics.nutritionScore / 3 + stageBonus
-        val attack = 18 + metrics.activityScore.coerceAtMost(130) / 8 + metrics.nutritionScore / 20 + stageBonus / 3
-        val defense = 10 + metrics.nutritionScore / 12 + metrics.consistencyScore / 15 + stageBonus / 4
-        val baseSpeed = 10 + metrics.activityScore.coerceAtMost(130) / 10 + metrics.stepGoalDays * 2
+        // 継承ポイントは1ptにつき基礎能力+1%(各能力15%上限は保存時に保証済み)。
+        fun inherit(base: Int, points: Int): Int = base * (100 + points) / 100
+        val maxHp = inherit(120 + metrics.consistencyScore / 2 + metrics.nutritionScore / 3 + stageBonus, legacy.hpPoints)
+        val attack = inherit(18 + metrics.activityScore.coerceAtMost(130) / 8 + metrics.nutritionScore / 20 + stageBonus / 3, legacy.attackPoints)
+        val defense = inherit(10 + metrics.nutritionScore / 12 + metrics.consistencyScore / 15 + stageBonus / 4, legacy.defensePoints)
+        val baseSpeed = inherit(10 + metrics.activityScore.coerceAtMost(130) / 10 + metrics.stepGoalDays * 2, legacy.speedPoints)
         val moodBand = MoodEngine.moodBand(mood)
         val speedDelta = (baseSpeed * 5 / 100).coerceAtLeast(1)
         val speed = when (moodBand) {

@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LegacyStatsEntity::class,
         InteractionStateEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class VitaMorphDatabase : RoomDatabase() {
@@ -43,6 +43,18 @@ abstract class VitaMorphDatabase : RoomDatabase() {
             }
         }
 
+        /** v3: 系譜表示用に世代へ最終形態・大会順位・継承内容の列を追加。既存行はデフォルト値。 */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `finalFormId` TEXT")
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `finalPlacement` INTEGER")
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `awardedHp` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `awardedAttack` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `awardedDefense` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `monster_generation` ADD COLUMN `awardedSpeed` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile
         private var instance: VitaMorphDatabase? = null
 
@@ -53,7 +65,7 @@ abstract class VitaMorphDatabase : RoomDatabase() {
                     VitaMorphDatabase::class.java,
                     DATABASE_NAME,
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }

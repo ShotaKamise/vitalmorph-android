@@ -58,11 +58,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.vitalmorph.domain.BattleEngine
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
+import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
+import app.vitalmorph.domain.LegacyStats
+import app.vitalmorph.domain.MonsterGeneration
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterForm
@@ -692,7 +696,7 @@ private fun ArenaScreen(
                         state.generation?.let { generation ->
                             Text(
                                 "コンディション: ${MoodEngine.moodBand(generation.mood).label}" +
-                                    if (generation.bond >= app.vitalmorph.domain.BattleEngine.CHEER_BOND_THRESHOLD) "・応援スタンバイ!" else "",
+                                    if (generation.bond >= BattleEngine.CHEER_BOND_THRESHOLD) "・応援スタンバイ!" else "",
                                 style = MaterialTheme.typography.labelMedium,
                             )
                         }
@@ -879,6 +883,82 @@ private fun TrainerScreen(state: GameUiState) {
                     Text("大会ポイント ${state.tournamentPoints} / 10")
                     Text("健康データの継続・栄養・活動がシーズン経験値の90%を占めます。")
                 }
+            }
+        }
+        item { LegacyStatsCard(state.legacyStats) }
+        if (state.pastGenerations.isNotEmpty()) {
+            item {
+                SectionTitle("系譜")
+                Text("歴代のパートナーと、受け継がれた力の記録。")
+            }
+            items(state.pastGenerations) { generation ->
+                GenerationCard(generation)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LegacyStatsCard(stats: LegacyStats) {
+    ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Mint.copy(alpha = 0.08f))) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("継承された力", fontWeight = FontWeight.Bold, color = Mint)
+            if (stats.totalGenerations == 0) {
+                Text("まだ継承の記録はありません。シーズンを完了すると、過ごし方に応じて次の世代へ力が受け継がれます。", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Text(
+                    "HP +${stats.hpPoints}%・攻撃 +${stats.attackPoints}%・防御 +${stats.defensePoints}%・素早さ +${stats.speedPoints}%",
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "${stats.totalGenerations}世代分の記録。各能力は+15%が上限で、受け継いだ力が減ることはありません。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GenerationCard(generation: MonsterGeneration) {
+    val form = generation.finalFormId?.let { id -> EvolutionEngine.allForms.firstOrNull { it.id == id } }
+    ElevatedCard {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (form != null) {
+                MonsterVisual(form, Modifier.size(64.dp), showAura = false)
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("第${generation.generationNumber}世代", fontWeight = FontWeight.Bold)
+                    Text(
+                        generation.sex.mark,
+                        fontWeight = FontWeight.Black,
+                        color = if (generation.sex == MonsterSex.MALE) Mint else Gold,
+                    )
+                }
+                Text(form?.name ?: "記録なし", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    when (generation.finalPlacement) {
+                        1 -> "大会: 優勝"
+                        2 -> "大会: 準優勝"
+                        4 -> "大会: ベスト4"
+                        8 -> "大会: 出場"
+                        else -> "大会: 記録なし"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                val awarded = buildList {
+                    if (generation.awardedHp > 0) add("HP+${generation.awardedHp}")
+                    if (generation.awardedAttack > 0) add("攻撃+${generation.awardedAttack}")
+                    if (generation.awardedDefense > 0) add("防御+${generation.awardedDefense}")
+                    if (generation.awardedSpeed > 0) add("素早さ+${generation.awardedSpeed}")
+                }
+                Text(
+                    if (awarded.isEmpty()) "継承: なし" else "継承: ${awarded.joinToString("・")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Gold,
+                )
             }
         }
     }

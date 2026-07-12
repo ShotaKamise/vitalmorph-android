@@ -19,6 +19,7 @@ import app.vitalmorph.domain.EvolutionEngine
 import app.vitalmorph.domain.EvolutionResult
 import app.vitalmorph.domain.InteractionEngine
 import app.vitalmorph.domain.InteractionState
+import app.vitalmorph.domain.LegacyAwardEngine
 import app.vitalmorph.domain.LegacyStats
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
@@ -72,6 +73,7 @@ data class GameUiState(
     val tournamentPoints: Int = 0,
     val trainerName: String? = null,
     val generation: MonsterGeneration? = null,
+    val pastGenerations: List<MonsterGeneration> = emptyList(),
     val legacyStats: LegacyStats = LegacyStats(),
     val interaction: InteractionState = InteractionState(),
     val dialogue: DialogueLine? = null,
@@ -151,6 +153,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             } else null
             val trainerName = runCatching { profiles.trainerProfile()?.name }.getOrNull()
             val legacyStats = runCatching { profiles.legacyStats() }.getOrDefault(LegacyStats())
+            val pastGenerations = runCatching {
+                profiles.allGenerations().filter { it.seasonEnd != null }.sortedByDescending { it.generationNumber }
+            }.getOrDefault(emptyList())
             val dialogue = dialogueFor(trainerName, evolution, generation, rawDays, stored.goals, today)
             mutableState.update {
                 it.copy(
@@ -169,6 +174,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     tournamentPoints = stored.tournamentPoints,
                     trainerName = trainerName,
                     generation = generation,
+                    pastGenerations = pastGenerations,
                     legacyStats = legacyStats,
                     interaction = interaction,
                     dialogue = dialogue,
@@ -324,6 +330,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             seed = current.seasonStart.toEpochDay().toInt() + evolution.seasonDay + current.tournamentPoints,
             mood = current.generation?.mood ?: MonsterGeneration.DEFAULT_MOOD,
             bond = current.generation?.bond ?: MonsterGeneration.DEFAULT_BOND,
+            legacy = current.legacyStats,
         )
         mutableState.update { it.copy(battle = battle, tournament = null) }
     }
@@ -425,11 +432,40 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         val seasonMetrics = EvolutionEngine.metrics(current.days, current.goals)
         val points = TrainerRankEngine.seasonPoints(current.days, seasonMetrics, current.tournamentPoints)
+        // この世代の過ごし方(食事・運動・交流・大会)から継承ポイント候補を決める。
+        val award = LegacyAwardEngine.award(
+            metrics = seasonMetrics,
+            bond = current.generation?.bond ?: 0,
+            tournamentPoints = current.tournamentPoints,
+        )
         viewModelScope.launch {
-            // 現世代を終了日付きで閉じる。次のrefreshで新世代がランダムな性別で孵化する。
-            runCatching { profiles.closeCurrentGeneration(current.today) }
+            var grantedTotal = 0
+            runCatching {
+                val before = profiles.legacyStats()
+                val after = before.addingGeneration(award.hp, award.attack, award.defense, award.speed)
+                profiles.saveLegacyStats(after)
+                // 実際に付与された量(1世代3pt・各能力15ptの上限適用後)を世代へ記録する。
+                val grantedHp = after.hpPoints - before.hpPoints
+                val grantedAttack = after.attackPoints - before.attackPoints
+                val grantedDefense = after.defensePoints - before.defensePoints
+                val grantedSpeed = after.speedPoints - before.speedPoints
+                grantedTotal = grantedHp + grantedAttack + grantedDefense + grantedSpeed
+                profiles.closeCurrentGeneration(
+                    endDate = current.today,
+                    finalFormId = evolution.form.id,
+                    finalPlacement = LegacyAwardEngine.placementForPoints(current.tournamentPoints),
+                    awardedHp = grantedHp,
+                    awardedAttack = grantedAttack,
+                    awardedDefense = grantedDefense,
+                    awardedSpeed = grantedSpeed,
+                )
+            }
             store.completeSeason(points)
-            mutableState.update { it.copy(tournament = null, battle = null, message = "シーズン完了: トレーナー経験値 +$points") }
+            val message = buildString {
+                append("シーズン完了: トレーナー経験値 +$points")
+                if (grantedTotal > 0) append("・継承ポイント +$grantedTotal")
+            }
+            mutableState.update { it.copy(tournament = null, battle = null, message = message) }
             refresh()
         }
     }

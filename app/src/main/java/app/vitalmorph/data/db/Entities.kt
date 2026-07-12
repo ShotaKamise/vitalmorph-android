@@ -32,6 +32,12 @@ data class MonsterGenerationEntity(
     val seasonEnd: String?,
     val mood: Int,
     val bond: Int,
+    val finalFormId: String? = null,
+    val finalPlacement: Int? = null,
+    val awardedHp: Int = 0,
+    val awardedAttack: Int = 0,
+    val awardedDefense: Int = 0,
+    val awardedSpeed: Int = 0,
 ) {
     fun toDomain() = MonsterGeneration(
         generationId = generationId,
@@ -41,6 +47,12 @@ data class MonsterGenerationEntity(
         seasonEnd = seasonEnd?.let(LocalDate::parse),
         mood = MonsterGeneration.clampMood(mood),
         bond = MonsterGeneration.clampBond(bond),
+        finalFormId = finalFormId,
+        finalPlacement = finalPlacement,
+        awardedHp = awardedHp,
+        awardedAttack = awardedAttack,
+        awardedDefense = awardedDefense,
+        awardedSpeed = awardedSpeed,
     )
 
     companion object {
@@ -52,6 +64,12 @@ data class MonsterGenerationEntity(
             seasonEnd = generation.seasonEnd?.toString(),
             mood = MonsterGeneration.clampMood(generation.mood),
             bond = MonsterGeneration.clampBond(generation.bond),
+            finalFormId = generation.finalFormId,
+            finalPlacement = generation.finalPlacement,
+            awardedHp = generation.awardedHp,
+            awardedAttack = generation.awardedAttack,
+            awardedDefense = generation.awardedDefense,
+            awardedSpeed = generation.awardedSpeed,
         )
     }
 }

@@ -15,20 +15,24 @@ updatedAt
 
 ## MonsterGeneration
 
+v0.7で確定した列(DBバージョン3)。stage・currentHp・battleStats・evolutionMetricsは
+毎回計算で求まるため永続化しない方針に変更した(変更理由: 進化は純関数 `EvolutionEngine.evaluate`
+の再計算で常に導出でき、二重管理による不整合を避けるため)。
+
 ```text
 generationId
 generationNumber
 sex               MALE / FEMALE
-stage
-formId
 seasonStart
 seasonEnd          進行中はnull
 mood               0から100
 bond               0から100
-currentHp
-battleStats
-evolutionMetrics
-finalPlacement
+finalFormId        シーズン完了時の形態ID(v0.7追加)
+finalPlacement     大会最高順位。未参加はnull(v0.7追加)
+awardedHp          実際に付与された継承ポイント(v0.7追加)
+awardedAttack
+awardedDefense
+awardedSpeed
 ```
 
 性別は孵化時に決定し、同じ `generationId` では変更しない。次世代で再抽選する。

@@ -43,6 +43,7 @@ object TrainerNameRules {
 
 /**
  * 28日シーズンごとの1世代。性別は孵化時に決定し、同じ世代では変更しない。
+ * シーズン完了時に最終形態・大会順位・継承内容を記録し、系譜画面で表示する。
  */
 data class MonsterGeneration(
     val generationId: Long = 0,
@@ -52,6 +53,15 @@ data class MonsterGeneration(
     val seasonEnd: LocalDate? = null,
     val mood: Int = DEFAULT_MOOD,
     val bond: Int = DEFAULT_BOND,
+    /** シーズン完了時点の形態ID。進行中はnull。 */
+    val finalFormId: String? = null,
+    /** シーズン中の大会最高順位(1=優勝)。大会未参加はnull。 */
+    val finalPlacement: Int? = null,
+    /** この世代で実際に付与された継承ポイント(上限適用後)。 */
+    val awardedHp: Int = 0,
+    val awardedAttack: Int = 0,
+    val awardedDefense: Int = 0,
+    val awardedSpeed: Int = 0,
 ) {
     companion object {
         const val MOOD_MIN = 0

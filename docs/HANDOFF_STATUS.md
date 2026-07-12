@@ -30,15 +30,19 @@
 - (v0.6 / Phase 3) ミニゲーム3種(コアキャッチ、パルストレーニング、ミールバランス)。報酬は1日3回まで、プレイ自体は無制限
 - (v0.6 / Phase 3) 機嫌のバトル補正(±5%以内: 絶好調=開始シールド、好調=素早さ+5%、不調=素早さ-5%、元気がない=開始エネルギー-1)。機嫌だけで参加は禁止しない
 - (v0.6 / Phase 3) 絆60以上で大会中1回の「トレーナーの応援」(HP25+エネルギー1)
+- (v0.7 / Phase 4) シーズン完了時の継承ポイント付与(食事・運動・交流・大会から各1pt、1世代3ptまで)
+- (v0.7 / Phase 4) 継承ポイントのバトル反映(1pt=+1%、各能力15%上限、減らない)
+- (v0.7 / Phase 4) トレーナータブの系譜画面(歴代の性別、最終形態、大会順位、継承内容)
+- (v0.7 / Phase 4) 世代記録の拡張(Room v3: finalFormId、finalPlacement、awarded*列)
 
 ## 現在のバージョン
 
 - applicationId: `app.vitalmorph`
-- versionCode: `7`
-- versionName: `0.6.0`
+- versionCode: `8`
+- versionName: `0.7.0`
 - minSdk: `28`
 - targetSdk / compileSdk: `36`
-- Room: `2.8.4`(KSP `2.3.9`、スキーマは `app/schemas/` へ出力、DBバージョン2)
+- Room: `2.8.4`(KSP `2.3.9`、スキーマは `app/schemas/` へ出力、DBバージョン3)
 
 ## Phase 2の実装メモ
 
@@ -62,12 +66,18 @@
 - バトル補正は `BattleEngine.startTournament(mood, bond)`。素早さ補正は±5%(整数丸めで消えないよう最低±1)。応援は `trainer_cheer` アイテムとして大会中1回、ラウンドをまたいで持ち越す。
 - ミールバランスの食品と主要栄養素は一般的な代表値による教育的な内容で、栄養指導や診断ではない。
 
+## Phase 4の実装メモ
+
+- 継承ポイントの獲得条件(`LegacyAwardEngine`): 絆40以上→HP+1、大会ポイント4以上→攻撃+1、シーズン栄養スコア60以上→防御+1、活動スコア70以上か歩数目標12日以上→素早さ+1。
+- 4候補すべて達成した場合は `LegacyStats.addingGeneration` がHP→攻撃→防御→素早さの優先順で3ptに切り詰める。世代レコードには上限適用後の実付与量を保存する。
+- バトル反映は `BattleEngine.startTournament(legacy)` で1pt=+1%(整数演算 `base*(100+pt)/100`)。機嫌補正と合成される。
+- 大会順位は結果画面を閉じた後でも記録できるよう、保存済み大会ポイントから `placementForPoints` で復元する。
+- 新世代は `MonsterGeneration` のデフォルト値で孵化するため、機嫌50・絆0への初期化は自動で満たされる。
+
 ## まだ実装していないもの
 
 - 性格
 - ミニゲームの `MINIGAME_SUCCESS` モーション連携(Codexのモーション完成待ち)
-- 28日終了時の能力継承ポイントの付与ロジック(保存基盤は完了、Phase 4)
-- 系譜画面(Phase 4)
 - VitaMorph内での食事入力、食品検索、履歴、お気に入り(Phase 5)
 - Health ConnectへのNutritionRecord書き込み(Phase 5)
 - バーコード検索(Phase 6)
@@ -84,13 +94,16 @@
 
 ## Claudeが次に行う作業
 
-Phase 3のClaude担当分は実装完了。`docs/IMPLEMENTATION_PLAN.md` のPhase 4(生まれ変わり、能力継承)に着手する。
+Phase 4のClaude担当分は実装完了。`docs/IMPLEMENTATION_PLAN.md` のPhase 5(食事管理MVP)に着手する。
 
-1. 28日終了時に世代を記録し、食事・運動・交流・大会成績から最大3継承ポイントを付与
-2. HP、攻撃、防御、素早さへの配分(1pt=約1%、1能力15pt上限、減らない)
-3. 継承ポイントのバトルステータス反映
-4. 系譜画面(過去の性別、最終形態、大会成績、継承内容)
-5. 機嫌の世代ごと初期化
+1. 朝食・昼食・夕食・間食の食事入力(食品名、量、カロリー、PFC)
+2. 自作食品、お気に入り、履歴、前日コピー
+3. 日次・週次グラフと目標との差
+4. 文部科学省の日本食品標準成分表の利用条件確認(組み込み前にユーザーへ確認)
+5. Health ConnectへのNutritionRecord書き込み(Client Record ID・Data Origin利用、あすけんとの二重計上回避)
+6. 栄養データの優先元選択(あすけん優先 / VitaMorph優先 / 日ごと)
+
+Phase 5は外部データソースの利用条件とHealth Connect書き込みという判断ポイントがあるため、着手時にユーザーへ方針を確認する。
 
 ## Codexへの依頼
 
