@@ -31,7 +31,8 @@ class BattleStateCodecTest {
         state = BattleEngine.useItem(state, "trainer_cheer")
         val json = BattleStateCodec.toJson(state)
         val restored = BattleStateCodec.fromJson(json)
-        assertEquals(state, restored)
+        // lastTurnEventsは演出専用で保存対象外のため、比較時はクリアして等価性を確認する。
+        assertEquals(state.copy(lastTurnEvents = emptyList()), restored)
         // シールド・開始エネルギー・アイテム在庫が実際に往復対象になっていることを確認する。
         assertEquals(state.playerStartShield, restored?.playerStartShield)
         assertEquals(state.playerStartEnergy, restored?.playerStartEnergy)

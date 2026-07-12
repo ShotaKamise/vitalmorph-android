@@ -208,6 +208,8 @@ object BattleEngine {
         var opponentPotions = state.opponentPotions
         var items = state.items
         val messages = mutableListOf("TURN ${state.turn}")
+        // 順次演出用イベント。ゲームロジックには一切影響しない派生記録。
+        val events = mutableListOf<TurnEvent>()
         val random = Random(state.seed + state.roundIndex * 997 + state.turn * 37)
         val cpuAction = chooseCpuAction(state, random)
 
@@ -233,15 +235,19 @@ object BattleEngine {
                             val healed = min(40, state.playerMaxHp - playerHp)
                             playerHp += healed
                             messages += "トレーナーは${playerAction.item.name}を使用。HPが${healed}回復！"
+                            events += TurnEvent(BattleActor.PLAYER, BattleEventKind.ITEM, playerAction.item.name)
+                            events += TurnEvent(BattleActor.PLAYER, BattleEventKind.HEAL, playerAction.item.name, heal = healed, actorHpAfter = playerHp)
                         }
                         energyItem.id -> {
                             val restored = min(2, MAX_ENERGY - playerEnergy)
                             playerEnergy += restored
                             messages += "トレーナーは${playerAction.item.name}を使用。エネルギー+$restored！"
+                            events += TurnEvent(BattleActor.PLAYER, BattleEventKind.ITEM, playerAction.item.name)
                         }
                         guardItem.id -> {
                             playerGuarding = true
                             messages += "トレーナーは${playerAction.item.name}を使用。防御膜を展開！"
+                            events += TurnEvent(BattleActor.PLAYER, BattleEventKind.GUARD, playerAction.item.name)
                         }
                         cheerItem.id -> {
                             val healed = min(25, state.playerMaxHp - playerHp)
@@ -249,12 +255,16 @@ object BattleEngine {
                             val restored = min(1, MAX_ENERGY - playerEnergy)
                             playerEnergy += restored
                             messages += "トレーナーの応援が届いた！ HPが${healed}回復、エネルギー+$restored！"
+                            events += TurnEvent(BattleActor.PLAYER, BattleEventKind.ITEM, playerAction.item.name)
+                            events += TurnEvent(BattleActor.PLAYER, BattleEventKind.HEAL, playerAction.item.name, heal = healed, actorHpAfter = playerHp)
                         }
                     }
                 }
                 is PlayerAction.Move -> {
                     val move = playerAction.move
                     playerEnergy -= move.energyCost
+                    val announceKind = if (move.kind == BattleMoveKind.GUARD) BattleEventKind.GUARD else BattleEventKind.MOVE
+                    events += TurnEvent(BattleActor.PLAYER, announceKind, move.name)
                     if (move.kind == BattleMoveKind.GUARD) {
                         playerGuarding = true
                         messages += "${state.playerName}の${move.name}！ 防御姿勢を取った。"
@@ -268,15 +278,19 @@ object BattleEngine {
                         }
                         opponentHp = max(0, opponentHp - damage)
                         messages += "${state.playerName}の${move.name}！ ${damage}ダメージ。"
+                        events += TurnEvent(BattleActor.PLAYER, BattleEventKind.DAMAGE_DEALT, move.name, damage = damage, targetHpAfter = opponentHp)
                     }
                     if (move.heal > 0) {
                         val healed = min(move.heal, state.playerMaxHp - playerHp)
                         playerHp += healed
                         messages += "HPが${healed}回復。"
+                        events += TurnEvent(BattleActor.PLAYER, BattleEventKind.HEAL, move.name, heal = healed, actorHpAfter = playerHp)
                     }
                     if (move.recoil > 0 && opponentHp > 0) {
                         playerHp = max(1, playerHp - move.recoil)
                         messages += "反動で${move.recoil}ダメージ。"
+                        // 反動は行動側の自傷。targetHpAfterは使わずactorHpAfterで表現する。
+                        events += TurnEvent(BattleActor.PLAYER, BattleEventKind.DAMAGE_DEALT, "反動", damage = move.recoil, actorHpAfter = playerHp)
                     }
                 }
             }
@@ -290,14 +304,18 @@ object BattleEngine {
                     opponentHp += healed
                     opponentPotions--
                     messages += "CPUトレーナーはリペアミストを使用。相手のHPが${healed}回復！"
+                    events += TurnEvent(BattleActor.OPPONENT, BattleEventKind.ITEM, "リペアミスト")
+                    events += TurnEvent(BattleActor.OPPONENT, BattleEventKind.HEAL, "リペアミスト", heal = healed, actorHpAfter = opponentHp)
                 }
                 CpuAction.Guard -> {
                     opponentGuarding = true
                     opponentEnergy = min(MAX_ENERGY, opponentEnergy + 1)
                     messages += "${state.opponentName}はガードし、力を溜めている。"
+                    events += TurnEvent(BattleActor.OPPONENT, BattleEventKind.GUARD, "ガード")
                 }
                 is CpuAction.Attack -> {
                     opponentEnergy -= cpuAction.cost
+                    events += TurnEvent(BattleActor.OPPONENT, BattleEventKind.MOVE, cpuAction.name)
                     var dealt = damage(cpuAction.power, state.opponentAttack, state.playerDefense, random)
                     if (playerGuarding) {
                         dealt = max(1, dealt / 2)
@@ -306,6 +324,7 @@ object BattleEngine {
                     }
                     playerHp = max(0, playerHp - dealt)
                     messages += "${state.opponentName}の${cpuAction.name}！ ${dealt}ダメージ。"
+                    events += TurnEvent(BattleActor.OPPONENT, BattleEventKind.DAMAGE_DEALT, cpuAction.name, damage = dealt, targetHpAfter = playerHp)
                 }
             }
         }
@@ -355,6 +374,7 @@ object BattleEngine {
             outcome = outcome,
             log = appendLog(state.log, *messages.toTypedArray()),
             completedMatches = matches,
+            lastTurnEvents = events,
         )
     }
 

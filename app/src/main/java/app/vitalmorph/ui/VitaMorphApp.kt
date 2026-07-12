@@ -45,6 +45,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,9 +65,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.vitalmorph.domain.BattleActor
 import app.vitalmorph.domain.BattleEngine
+import app.vitalmorph.domain.BattleEventKind
 import app.vitalmorph.domain.DailyHealthData
 import app.vitalmorph.domain.BattleOutcome
+import app.vitalmorph.domain.TurnEvent
 import app.vitalmorph.domain.DexCatalog
 import app.vitalmorph.domain.DialogueChoice
 import app.vitalmorph.domain.DialogueLine
@@ -736,6 +740,54 @@ private fun ArenaScreen(
 ) {
     val currentForm = state.evolution?.form
     val battle = state.battle
+
+    // 順次演出の状態。lastTurnEventsを約800msずつ再生し、HPバーを段階的に動かす。
+    // 表示HPは前ターンの終端値を保持しており、ターン切替時はそれが「開始前HP」になる。
+    var displayedPlayerHp by remember { mutableIntStateOf(battle?.playerHp ?: 0) }
+    var displayedOpponentHp by remember { mutableIntStateOf(battle?.opponentHp ?: 0) }
+    var currentEvent by remember { mutableStateOf<TurnEvent?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+
+    LaunchedEffect(battle?.roundIndex, battle?.turn) {
+        val b = battle
+        if (b == null) {
+            isPlaying = false
+            currentEvent = null
+            return@LaunchedEffect
+        }
+        val events = b.lastTurnEvents
+        if (events.isEmpty()) {
+            // 復元直後・ラウンド開始・大会開始時は即座に確定HPへ合わせる。
+            displayedPlayerHp = b.playerHp
+            displayedOpponentHp = b.opponentHp
+            currentEvent = null
+            isPlaying = false
+            return@LaunchedEffect
+        }
+        isPlaying = true
+        for (event in events) {
+            currentEvent = event
+            if (event.targetHpAfter >= 0) {
+                when (event.actor) {
+                    BattleActor.PLAYER -> displayedOpponentHp = event.targetHpAfter
+                    BattleActor.OPPONENT -> displayedPlayerHp = event.targetHpAfter
+                }
+            }
+            if (event.actorHpAfter >= 0) {
+                when (event.actor) {
+                    BattleActor.PLAYER -> displayedPlayerHp = event.actorHpAfter
+                    BattleActor.OPPONENT -> displayedOpponentHp = event.actorHpAfter
+                }
+            }
+            delay(800)
+        }
+        // 再生後は必ず確定値へ同期する。
+        displayedPlayerHp = b.playerHp
+        displayedOpponentHp = b.opponentHp
+        currentEvent = null
+        isPlaying = false
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -769,11 +821,15 @@ private fun ArenaScreen(
             }
         }
         if (currentForm != null && battle != null) {
-            item { TurnBattleStage(currentForm, battle) }
+            item { TurnBattleStage(currentForm, battle, displayedPlayerHp, displayedOpponentHp, currentEvent) }
             when (battle.outcome) {
-                BattleOutcome.IN_PROGRESS -> item { BattleCommandPanel(battle, onBattleMove, onBattleItem) }
+                BattleOutcome.IN_PROGRESS -> item { BattleCommandPanel(battle, isPlaying, onBattleMove, onBattleItem) }
                 BattleOutcome.ROUND_WON -> item {
-                    Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = onNextRound) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        enabled = !isPlaying,
+                        onClick = onNextRound,
+                    ) {
                         Text("HPを35%回復して次の試合へ")
                     }
                 }
@@ -792,45 +848,114 @@ private fun ArenaScreen(
 }
 
 @Composable
-private fun TurnBattleStage(form: MonsterForm, battle: TurnBattleState) {
+private fun TurnBattleStage(
+    form: MonsterForm,
+    battle: TurnBattleState,
+    displayedPlayerHp: Int,
+    displayedOpponentHp: Int,
+    currentEvent: TurnEvent?,
+) {
     ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = Color(form.accent).copy(alpha = 0.10f))) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(battle.roundLabel, color = Gold, fontWeight = FontWeight.Black)
                 Text("TURN ${battle.turn}", fontWeight = FontWeight.Bold)
             }
-            BattleHealthBar(battle.opponentName, battle.opponentHp, battle.opponentMaxHp, Color(0xFFB89CFF))
+            BattleHealthBar(battle.opponentName, displayedOpponentHp, battle.opponentMaxHp, Color(0xFFB89CFF))
             Row(
                 Modifier.fillMaxWidth().height(160.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                MonsterVisual(
-                    form = form,
-                    modifier = Modifier.weight(1f).height(150.dp),
-                    motion = when (battle.outcome) {
-                        BattleOutcome.TOURNAMENT_WON, BattleOutcome.ROUND_WON -> MonsterMotion.VICTORY
-                        BattleOutcome.PLAYER_LOST -> MonsterMotion.HIT
-                        BattleOutcome.IN_PROGRESS -> MonsterMotion.ATTACK
-                    },
-                )
+                Box(Modifier.weight(1f).height(150.dp), contentAlignment = Alignment.TopCenter) {
+                    MonsterVisual(
+                        form = form,
+                        modifier = Modifier.fillMaxSize(),
+                        motion = battleMotion(currentEvent, battle.outcome, playerSide = true),
+                    )
+                    BattleFloatingLabel(currentEvent, playerSide = true)
+                }
                 Text("VS", color = Gold, fontWeight = FontWeight.Black, fontSize = 20.sp)
-                MonsterSprite(
-                    drawableRes = MonsterArtwork.resourceForOpponent(battle.opponentName),
-                    contentDescription = battle.opponentName,
-                    accent = Color(0xFFB89CFF),
-                    modifier = Modifier.weight(1f).height(150.dp),
-                    motion = when (battle.outcome) {
-                        BattleOutcome.PLAYER_LOST -> MonsterMotion.VICTORY
-                        else -> MonsterMotion.HIT
-                    },
-                    facingRight = false,
-                )
+                Box(Modifier.weight(1f).height(150.dp), contentAlignment = Alignment.TopCenter) {
+                    MonsterSprite(
+                        drawableRes = MonsterArtwork.resourceForOpponent(battle.opponentName),
+                        contentDescription = battle.opponentName,
+                        accent = Color(0xFFB89CFF),
+                        modifier = Modifier.fillMaxSize(),
+                        motion = battleMotion(currentEvent, battle.outcome, playerSide = false),
+                        facingRight = false,
+                    )
+                    BattleFloatingLabel(currentEvent, playerSide = false)
+                }
             }
-            BattleHealthBar(battle.playerName, battle.playerHp, battle.playerMaxHp, Color(form.accent))
+            BattleHealthBar(battle.playerName, displayedPlayerHp, battle.playerMaxHp, Color(form.accent))
             Text("コアエネルギー ${"●".repeat(battle.playerEnergy)}${"○".repeat(3 - battle.playerEnergy)}", color = Gold)
         }
     }
+}
+
+/**
+ * 演出中の各サイドのモーションを決める。イベントが無い(再生していない)場合は
+ * 決着状況に応じた従来の静止モーションへフォールバックする。
+ */
+private fun battleMotion(event: TurnEvent?, outcome: BattleOutcome, playerSide: Boolean): MonsterMotion {
+    if (event == null) {
+        return if (playerSide) {
+            when (outcome) {
+                BattleOutcome.TOURNAMENT_WON, BattleOutcome.ROUND_WON -> MonsterMotion.VICTORY
+                BattleOutcome.PLAYER_LOST -> MonsterMotion.HIT
+                BattleOutcome.IN_PROGRESS -> MonsterMotion.IDLE
+            }
+        } else {
+            when (outcome) {
+                BattleOutcome.PLAYER_LOST -> MonsterMotion.VICTORY
+                else -> MonsterMotion.IDLE
+            }
+        }
+    }
+    val isActor = (event.actor == BattleActor.PLAYER) == playerSide
+    return when (event.kind) {
+        BattleEventKind.MOVE, BattleEventKind.ITEM -> if (isActor) MonsterMotion.ATTACK else MonsterMotion.IDLE
+        BattleEventKind.DAMAGE_DEALT -> {
+            // 被弾側は、通常攻撃なら行動側の反対、反動(actorHpAfterのみ)なら行動側自身。
+            val targetIsThisSide = if (event.targetHpAfter >= 0) {
+                (event.actor == BattleActor.OPPONENT) == playerSide
+            } else {
+                (event.actor == BattleActor.PLAYER) == playerSide
+            }
+            when {
+                targetIsThisSide -> MonsterMotion.HIT
+                isActor -> MonsterMotion.ATTACK
+                else -> MonsterMotion.IDLE
+            }
+        }
+        BattleEventKind.HEAL -> if (isActor) MonsterMotion.VICTORY else MonsterMotion.IDLE
+        BattleEventKind.GUARD, BattleEventKind.ANNOUNCE -> MonsterMotion.IDLE
+    }
+}
+
+/** ダメージ・回復・ガードの浮き出しラベル(対象サイドに表示)。 */
+@Composable
+private fun BattleFloatingLabel(event: TurnEvent?, playerSide: Boolean) {
+    event ?: return
+    val (text, color) = when (event.kind) {
+        BattleEventKind.DAMAGE_DEALT -> {
+            val targetIsThisSide = if (event.targetHpAfter >= 0) {
+                event.actor == BattleActor.OPPONENT && playerSide || event.actor == BattleActor.PLAYER && !playerSide
+            } else {
+                (event.actor == BattleActor.PLAYER) == playerSide
+            }
+            if (targetIsThisSide && event.damage > 0) "-${event.damage}" to Color(0xFFFF5A5A) else return
+        }
+        BattleEventKind.HEAL -> {
+            if ((event.actor == BattleActor.PLAYER) == playerSide && event.heal > 0) "+${event.heal}" to Color(0xFF69E6A6) else return
+        }
+        BattleEventKind.GUARD -> {
+            if ((event.actor == BattleActor.PLAYER) == playerSide) "ガード!" to Gold else return
+        }
+        else -> return
+    }
+    Text(text, color = color, fontWeight = FontWeight.Black, fontSize = 22.sp)
 }
 
 @Composable
@@ -851,6 +976,7 @@ private fun BattleHealthBar(name: String, hp: Int, maxHp: Int, accent: Color) {
 @Composable
 private fun BattleCommandPanel(
     battle: TurnBattleState,
+    isPlaying: Boolean,
     onMove: (String) -> Unit,
     onItem: (String) -> Unit,
 ) {
@@ -860,7 +986,7 @@ private fun BattleCommandPanel(
             battle.moves.forEach { move ->
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = battle.playerEnergy >= move.energyCost,
+                    enabled = !isPlaying && battle.playerEnergy >= move.energyCost,
                     onClick = { onMove(move.id) },
                 ) {
                     Column(Modifier.fillMaxWidth()) {
@@ -881,7 +1007,7 @@ private fun BattleCommandPanel(
                 OutlinedButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { onItem(stock.item.id) },
-                    enabled = stock.remaining > 0,
+                    enabled = !isPlaying && stock.remaining > 0,
                 ) {
                     Column(Modifier.fillMaxWidth()) {
                         Text("${stock.item.name} ×${stock.remaining}", fontWeight = FontWeight.Bold)

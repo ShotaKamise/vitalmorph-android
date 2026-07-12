@@ -148,6 +148,28 @@ enum class BattleOutcome {
     PLAYER_LOST,
 }
 
+/** ターン内の行動主体。プレイヤー側かCPU側かを示す。 */
+enum class BattleActor { PLAYER, OPPONENT }
+
+/** 順次演出のためのイベント種別。 */
+enum class BattleEventKind { MOVE, ITEM, GUARD, HEAL, DAMAGE_DEALT, ANNOUNCE }
+
+/**
+ * 1ターン内で発生した個々の出来事(演出専用データ)。
+ *
+ * ゲームロジックには影響せず、UIが技→ダメージの順で段階的に再生するための派生情報。
+ * `resolveTurn` が確定後のHP等と矛盾しないように記録する。保存(Codec)には含めない。
+ */
+data class TurnEvent(
+    val actor: BattleActor,
+    val kind: BattleEventKind,
+    val label: String,          // 技名・アイテム名・メッセージ
+    val damage: Int = 0,        // 相手に与えたダメージ(DAMAGE_DEALT時)
+    val heal: Int = 0,
+    val targetHpAfter: Int = -1, // このイベント適用後の被弾側HP(UIの段階的HPバー用)
+    val actorHpAfter: Int = -1,  // 行動側HP(回復・反動用)
+)
+
 data class TurnBattleState(
     val roundIndex: Int,
     val roundLabel: String,
@@ -179,4 +201,9 @@ data class TurnBattleState(
     val playerStartEnergy: Int = 3,
     /** 絶好調時に各試合の開始時へ張られる小さなシールド。 */
     val playerStartShield: Boolean = false,
+    /**
+     * 直近のターンで発生したイベント列(演出専用・保存対象外)。
+     * ターンごとに置き換え、ラウンド遷移時は空になる。
+     */
+    val lastTurnEvents: List<TurnEvent> = emptyList(),
 )

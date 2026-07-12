@@ -52,6 +52,68 @@ class BattleEngineTest {
     }
 
     @Test
+    fun `resolving a turn emits ordered turn events`() {
+        val initial = BattleEngine.startTournament(monster, metrics, 42)
+        val updated = BattleEngine.useMove(initial, "core_strike")
+        assertTrue("events should be recorded", updated.lastTurnEvents.isNotEmpty())
+    }
+
+    @Test
+    fun `priority move makes the player act first`() {
+        // ガードシフトは優先度2。相手が満タンで回復せず、素早さでも上回るため必ずプレイヤーが先。
+        val initial = BattleEngine.startTournament(monster, metrics, 42)
+        assertTrue(initial.playerSpeed >= initial.opponentSpeed)
+        val updated = BattleEngine.useMove(initial, "guard_shift")
+        assertEquals(BattleActor.PLAYER, updated.lastTurnEvents.first().actor)
+    }
+
+    @Test
+    fun `slower player lets the opponent act first`() {
+        // 素早さを相手より大幅に下げ、優先度0の技を使うと、CPUの行動種別に関わらず相手が先手。
+        val initial = BattleEngine.startTournament(monster, metrics, 42)
+            .copy(playerSpeed = 1, opponentSpeed = 99)
+        val updated = BattleEngine.useMove(initial, "core_strike")
+        assertEquals(BattleActor.OPPONENT, updated.lastTurnEvents.first().actor)
+    }
+
+    @Test
+    fun `damage and heal events reconcile with final hp`() {
+        val initial = BattleEngine.startTournament(monster, metrics, 42)
+        val updated = BattleEngine.useMove(initial, "core_strike")
+        val events = updated.lastTurnEvents
+        // 相手へのダメージ(通常攻撃はtargetHpAfterを持つ)と相手の回復。
+        val damageToOpponent = events
+            .filter { it.actor == BattleActor.PLAYER && it.kind == BattleEventKind.DAMAGE_DEALT && it.targetHpAfter >= 0 }
+            .sumOf { it.damage }
+        val healToOpponent = events
+            .filter { it.actor == BattleActor.OPPONENT && it.kind == BattleEventKind.HEAL }
+            .sumOf { it.heal }
+        // プレイヤーへのダメージ(CPU攻撃)、プレイヤーの反動(actorHpAfterを持つ自傷)、プレイヤーの回復。
+        val damageToPlayer = events
+            .filter { it.actor == BattleActor.OPPONENT && it.kind == BattleEventKind.DAMAGE_DEALT }
+            .sumOf { it.damage } +
+            events.filter { it.actor == BattleActor.PLAYER && it.kind == BattleEventKind.DAMAGE_DEALT && it.targetHpAfter < 0 }
+                .sumOf { it.damage }
+        val healToPlayer = events
+            .filter { it.actor == BattleActor.PLAYER && it.kind == BattleEventKind.HEAL }
+            .sumOf { it.heal }
+        assertEquals(initial.opponentHp - damageToOpponent + healToOpponent, updated.opponentHp)
+        assertEquals(initial.playerHp - damageToPlayer + healToPlayer, updated.playerHp)
+    }
+
+    @Test
+    fun `turn events reset when advancing to the next round`() {
+        val initial = BattleEngine.startTournament(monster, metrics, 42).copy(
+            opponentHp = 1,
+            playerAttack = 100,
+        )
+        val won = BattleEngine.useMove(initial, "core_strike")
+        assertTrue(won.lastTurnEvents.isNotEmpty())
+        val next = BattleEngine.nextRound(won)
+        assertTrue("round transition clears events", next.lastTurnEvents.isEmpty())
+    }
+
+    @Test
     fun `final victory produces tournament result`() {
         val initial = BattleEngine.startTournament(monster, metrics, 42).copy(
             roundIndex = 2,
