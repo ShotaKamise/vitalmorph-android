@@ -19,6 +19,8 @@
 - U2 食事入力機能の削除・あすけん一本化: 完了。アプリ内の食事入力UI(食事タブ・MealsScreen・BarcodeScannerScreen・OpenFoodFactsRepository)を削除し、栄養はHealth Connect(あすけん経由)の読み取りのみへ戻した。
   - 権限縮小: `INTERNET` / `CAMERA` / `WRITE_NUTRITION` を撤去(CameraX・ML Kit依存も削除)。HealthConnectRepositoryは読み取り専用に。
   - データ保護: Roomのエンティティ・DAO・マイグレーション(v1〜v9)と `app/schemas/**` はすべて保持。`FoodRepository` とドメイン(`NutritionResolver` 等)も将来の再有効化に備えて残置(未使用)。旧prefsキー(nutrition_source等)は消さずオーファン化。
+- U13 キャッチーなアプリアイコン(Issue #14): 完了。ベクターのアダプティブアイコンを新設(生命卵+コアの光、ミント#69E6A6/ゴールド#FFD166/ネイビー#0B1522・#132437)。`res/drawable/ic_launcher_background.xml`(ネイビーのグラデ+低アルファのミント光)、`ic_launcher_foreground.xml`(卵の殻+ひび+光るコア)、`ic_launcher_monochrome.xml`(Android 13+のテーマアイコン用単色シルエット)を追加し、`mipmap-anydpi-v26/ic_launcher(.round).xml` から参照。旧 `mipmap-anydpi/*`(フラット背景色参照)は削除。ラスター画像は追加していない。
+  - 画像ベースへ差し替える場合はCodexで対応可能。その場合は `ic_launcher_foreground.xml` を画像(またはビットマップ参照ドローアブル)へ置き換える。背景・monochromeはベクターのまま流用できる。
 
 ## 現在の完成範囲
 

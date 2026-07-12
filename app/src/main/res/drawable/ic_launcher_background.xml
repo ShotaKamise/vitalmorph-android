@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ランチャーアイコン背景: 深いネイビーのラジアルグラデーション + 低アルファのミント光で奥行き -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ベース: 中央がやや明るいネイビー、外周は暗いネイビー -->
+    <path android:pathData="M0,0 h108 v108 h-108 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="46"
+                android:gradientRadius="82">
+                <item android:offset="0" android:color="#FF163049" />
+                <item android:offset="0.6" android:color="#FF132437" />
+                <item android:offset="1" android:color="#FF0B1522" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ソフトなミントの光球（低アルファ）で奥行きを追加 -->
+    <path
+        android:fillColor="#1469E6A6"
+        android:pathData="M84,22 m-30,0 a30,30 0 1,0 60,0 a30,30 0 1,0 -60,0 z" />
+    <path
+        android:fillColor="#0F69E6A6"
+        android:pathData="M22,92 m-26,0 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0 z" />
+
+    <!-- 斜めのエネルギーライン（低アルファのミント） -->
+    <path
+        android:strokeColor="#1869E6A6"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M8,74 L44,20" />
+    <path
+        android:strokeColor="#1269E6A6"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M66,96 L100,44" />
+</vector>

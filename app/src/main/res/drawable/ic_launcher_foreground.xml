@@ -1,16 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- ランチャーアイコン前景: 生命卵 + コアの光。安全領域(中央66dp円)内に収める -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 卵の殻: 白 → 淡いミントの縦グラデーション -->
+    <path android:pathData="M54,30 C66,30 72.5,48 72.5,60 C72.5,72 64,80 54,80 C44,80 35.5,72 35.5,60 C35.5,48 42,30 54,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="30"
+                android:endX="54"
+                android:endY="80">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFC6F5DE" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 殻のミント斑点（2-3個） -->
     <path
-        android:fillColor="#69E6A6"
-        android:pathData="M54,18 C35,18 23,35 23,54 C23,74 36,90 54,90 C72,90 85,74 85,54 C85,35 73,18 54,18 Z" />
+        android:fillColor="#5F69E6A6"
+        android:pathData="M46,43 m-3.2,0 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0 z" />
     <path
-        android:fillColor="#101D2C"
-        android:pathData="M39,50 C42,45 47,45 50,50 C47,55 42,55 39,50 Z M58,50 C61,45 66,45 69,50 C66,55 61,55 58,50 Z" />
+        android:fillColor="#5069E6A6"
+        android:pathData="M63,46 m-2.6,0 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0 z" />
     <path
-        android:fillColor="#FFD166"
-        android:pathData="M48,65 L54,72 L60,65 L57,78 L51,78 Z" />
+        android:fillColor="#5069E6A6"
+        android:pathData="M60,69 m-2.8,0 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0 z" />
+
+    <!-- ふ化を示すジグザグのひび（濃いネイビーの太めストローク） -->
+    <path
+        android:strokeColor="#FF0B1522"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M37,55 L44,50 L50,58 L56,49 L62,57 L68,51 L71.5,55" />
+
+    <!-- コアの光: 4点スパークル（外側の淡い金） -->
+    <path
+        android:fillColor="#66FFE9A8"
+        android:pathData="M54,38 L57.5,49.5 L69,53 L57.5,56.5 L54,68 L50.5,56.5 L39,53 L50.5,49.5 Z" />
+
+    <!-- コアの外周グロー（低アルファの金） -->
+    <path
+        android:fillColor="#55FFD166"
+        android:pathData="M54,53 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 z" />
+
+    <!-- 光るコア本体（金） -->
+    <path
+        android:fillColor="#FFFFD166"
+        android:pathData="M54,53 m-6.5,0 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0 z" />
+
+    <!-- コア中心のハイライト -->
+    <path
+        android:fillColor="#FFFFF3C4"
+        android:pathData="M53,51.5 m-2.8,0 a2.8,2.8 0 1,0 5.6,0 a2.8,2.8 0 1,0 -5.6,0 z" />
 </vector>
