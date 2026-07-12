@@ -69,8 +69,8 @@
 ## 現在のバージョン
 
 - applicationId: `app.vitalmorph`
-- versionCode: `12`
-- versionName: `1.0.0`
+- versionCode: `13`
+- versionName: `1.1.0`
 - minSdk: `28`
 - targetSdk / compileSdk: `36`
 - Room: `2.8.4`(KSP `2.3.9`、スキーマは `app/schemas/` へ出力、DBバージョン6)
