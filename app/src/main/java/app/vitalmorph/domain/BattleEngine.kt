@@ -5,7 +5,7 @@ import kotlin.math.min
 import kotlin.random.Random
 
 object BattleEngine {
-    private const val MAX_ENERGY = 3
+    private val MAX_ENERGY = BattleStatsCalculator.MAX_ENERGY
     private val rounds = listOf("準々決勝", "準決勝", "決勝")
 
     private val healingItem = BattleItem("vita_tonic", "ヴィータトニック", "HPを40回復する")
@@ -34,42 +34,30 @@ object BattleEngine {
         week: Int = 4,
         practice: Boolean = false,
     ): TurnBattleState {
-        val stageBonus = monster.stage.ordinal * 12
-        // 継承ポイントは1ptにつき基礎能力+1%(各能力15%上限は保存時に保証済み)。
-        fun inherit(base: Int, points: Int): Int = base * (100 + points) / 100
-        val maxHp = inherit(120 + metrics.consistencyScore / 2 + metrics.nutritionScore / 3 + stageBonus, legacy.hpPoints)
-        val attack = inherit(18 + metrics.activityScore.coerceAtMost(130) / 8 + metrics.nutritionScore / 20 + stageBonus / 3, legacy.attackPoints)
-        val defense = inherit(10 + metrics.nutritionScore / 12 + metrics.consistencyScore / 15 + stageBonus / 4, legacy.defensePoints)
-        val baseSpeed = inherit(10 + metrics.activityScore.coerceAtMost(130) / 10 + metrics.stepGoalDays * 2, legacy.speedPoints)
-        val moodBand = MoodEngine.moodBand(mood)
-        val speedDelta = (baseSpeed * 5 / 100).coerceAtLeast(1)
-        val speed = when (moodBand) {
-            MoodBand.GOOD -> baseSpeed + speedDelta
-            MoodBand.LOW -> (baseSpeed - speedDelta).coerceAtLeast(1)
-            else -> baseSpeed
-        }
+        // 能力・機嫌補正の算出はBattleStatsCalculatorに一元化する(詳細画面U10と同一値)。
+        val stats = BattleStatsCalculator.statsFor(monster, metrics, mood, bond, legacy)
         val items = buildList {
             add(BattleItemStock(healingItem, 2))
             add(BattleItemStock(energyItem, 1))
             add(BattleItemStock(guardItem, 1))
-            if (bond >= CHEER_BOND_THRESHOLD) add(BattleItemStock(cheerItem, 1))
+            if (stats.cheerAvailable) add(BattleItemStock(cheerItem, 1))
         }
         return createRound(
             roundIndex = 0,
             playerName = monster.name,
-            playerHp = maxHp,
-            playerMaxHp = maxHp,
-            playerAttack = attack,
-            playerDefense = defense,
-            playerSpeed = speed,
+            playerHp = stats.maxHp,
+            playerMaxHp = stats.maxHp,
+            playerAttack = stats.attack,
+            playerDefense = stats.defense,
+            playerSpeed = stats.speed,
             moves = movesFor(monster.family),
             items = items,
             completedMatches = emptyList(),
             seed = seed,
             week = week,
             practice = practice,
-            startEnergy = if (moodBand == MoodBand.BAD) MAX_ENERGY - 1 else MAX_ENERGY,
-            startShield = moodBand == MoodBand.GREAT,
+            startEnergy = stats.startEnergy,
+            startShield = stats.startShield,
         )
     }
 

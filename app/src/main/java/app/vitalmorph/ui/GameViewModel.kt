@@ -94,6 +94,7 @@ data class GameUiState(
     val activeMiniGame: MiniGameKind? = null,
     val miniGameSeed: Int = 0,
     val showHatchAnimation: Boolean = false,
+    val showMonsterDetail: Boolean = false,
     val selectedTab: AppTab = AppTab.HOME,
     val message: String? = null,
 )
@@ -217,6 +218,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     loading = false,
                     battle = restoredBattle,
                     showHatchAnimation = showHatch,
+                    showMonsterDetail = false,
                     onboardingComplete = stored.onboardingComplete,
                     goals = stored.goals,
                     seasonStart = stored.seasonStart,
@@ -492,6 +494,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** ミニゲーム成功時の祝福モーションを一定時間後に解除する。 */
     fun clearMiniGameCelebration() {
         mutableState.update { it.copy(miniGameCelebration = false) }
+    }
+
+    /** モンスター詳細ステータス画面(U10)を開く。 */
+    fun showMonsterDetail() {
+        mutableState.update { it.copy(showMonsterDetail = true) }
+    }
+
+    /** モンスター詳細ステータス画面を閉じる。 */
+    fun hideMonsterDetail() {
+        mutableState.update { it.copy(showMonsterDetail = false) }
     }
 
     /** 孵化演出を見終えたら、この世代を既読化してオーバーレイを閉じる。 */

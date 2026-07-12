@@ -40,6 +40,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -153,6 +154,10 @@ fun VitaMorphApp(
                     sex = state.generation?.sex,
                     onDone = viewModel::onHatchAnimationDone,
                 )
+                state.showMonsterDetail && state.evolution != null -> MonsterDetailSheet(
+                    state = state,
+                    onClose = viewModel::hideMonsterDetail,
+                )
                 else -> MainGameScreen(
                     state = state,
                     snackbar = snackbar,
@@ -174,6 +179,7 @@ fun VitaMorphApp(
                     onDialogueChoice = viewModel::onDialogueChoice,
                     onTalkAgain = viewModel::talkAgain,
                     onStartMiniGame = viewModel::startMiniGame,
+                    onShowMonsterDetail = viewModel::showMonsterDetail,
                 )
             }
         }
@@ -288,6 +294,7 @@ private fun MainGameScreen(
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
+    onShowMonsterDetail: () -> Unit,
 ) {
     Scaffold(
         modifier = Modifier.navigationBarsPadding(),
@@ -340,6 +347,7 @@ private fun MainGameScreen(
                     onDialogueChoice,
                     onTalkAgain,
                     onStartMiniGame,
+                    onShowMonsterDetail,
                 )
                 AppTab.EVOLUTION -> EvolutionScreen(state.evolution, state.generation?.route)
                 AppTab.ARENA -> ArenaScreen(state, onStartTournament, onBattleMove, onBattleItem, onNextRound)
@@ -363,6 +371,7 @@ private fun HomeScreen(
     onDialogueChoice: (DialogueChoice) -> Unit,
     onTalkAgain: () -> Unit,
     onStartMiniGame: (MiniGameKind) -> Unit,
+    onShowMonsterDetail: () -> Unit,
 ) {
     val evolution = state.evolution ?: return
     val todayData = state.days.lastOrNull()
@@ -384,6 +393,7 @@ private fun HomeScreen(
                 onTouch = onTouch,
                 onReactionShown = onReactionShown,
                 onCelebrationShown = onCelebrationShown,
+                onShowDetail = onShowMonsterDetail,
             )
         }
         state.dialogue?.let { dialogue ->
@@ -477,6 +487,7 @@ private fun MonsterHero(
     onTouch: ((TouchArea) -> Unit)? = null,
     onReactionShown: () -> Unit = {},
     onCelebrationShown: () -> Unit = {},
+    onShowDetail: (() -> Unit)? = null,
 ) {
     // タッチ反応は少し表示してから通常モーションへ戻す。
     LaunchedEffect(touchReaction) {
@@ -582,6 +593,11 @@ private fun MonsterHero(
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            onShowDetail?.let {
+                TextButton(onClick = it, modifier = Modifier.padding(top = 4.dp)) {
+                    Text("くわしく", color = Mint)
+                }
+            }
         }
     }
 }
