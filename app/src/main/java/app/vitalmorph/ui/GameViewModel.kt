@@ -24,6 +24,7 @@ import app.vitalmorph.domain.InteractionEngine
 import app.vitalmorph.domain.InteractionState
 import app.vitalmorph.domain.LegacyAwardEngine
 import app.vitalmorph.domain.LegacyStats
+import app.vitalmorph.domain.MiniGameDifficulty
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
 import app.vitalmorph.domain.MonsterGeneration
@@ -418,18 +419,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         mutableState.update { it.copy(activeMiniGame = null) }
     }
 
-    /** ミニゲーム終了。スコアから成否を判定し、上限内なら機嫌・絆へ反映する。 */
-    fun finishMiniGame(score: Int) {
+    /** ミニゲーム終了。スコアと難易度から成否を判定し、上限内なら機嫌・絆へ反映する。 */
+    fun finishMiniGame(score: Int, difficulty: MiniGameDifficulty) {
         val current = mutableState.value
         val kind = current.activeMiniGame ?: return
-        val result = MiniGameRules.resultFor(kind, score)
+        val result = MiniGameRules.resultFor(kind, score, difficulty)
         val reward = InteractionEngine.onMiniGame(
             state = current.interaction,
             now = System.currentTimeMillis(),
             today = current.today,
         )
-        val moodDelta = if (result.success) MoodEngine.MINIGAME_SUCCESS_MOOD else MoodEngine.MINIGAME_TRY_MOOD
-        val bondDelta = if (result.success) MoodEngine.MINIGAME_SUCCESS_BOND else 0
+        // 成功時の報酬は難易度でスケール。挑戦(不成功)は難易度に関わらず機嫌+1で責めない。
+        val moodDelta = if (result.success) MiniGameRules.successMood(difficulty) else MoodEngine.MINIGAME_TRY_MOOD
+        val bondDelta = if (result.success) MiniGameRules.successBond(difficulty) else 0
         val generation = current.generation
         val updated = if (generation != null && reward.rewarded) {
             MoodEngine.applyDelta(generation, moodDelta, bondDelta)
@@ -441,7 +443,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         val message = buildString {
-            append("${kind.label}: ${result.score} / ${result.maxScore}点")
+            append("${kind.label}(${difficulty.label}): ${result.score} / ${result.maxScore}")
             append(if (result.success) "でクリア！" else "。また挑戦しよう！")
             if (reward.rewarded) {
                 append(" 機嫌+$moodDelta")

@@ -10,14 +10,66 @@ class MiniGameRulesTest {
     private val today: LocalDate = LocalDate.of(2026, 7, 12)
 
     @Test
-    fun `core catch cells are deterministic and never repeat consecutively`() {
-        val cells = MiniGameRules.coreCatchCells(seed = 42)
-        assertEquals(MiniGameRules.CORE_CATCH_ROUNDS, cells.size)
-        assertEquals(cells, MiniGameRules.coreCatchCells(seed = 42))
-        cells.zipWithNext().forEach { (a, b) ->
-            assertTrue("cell repeated: $a", a != b)
-        }
-        assertTrue(cells.all { it in 0 until MiniGameRules.CORE_CATCH_CELLS })
+    fun `core catch numbers are a deterministic permutation of 1 to 25`() {
+        val numbers = MiniGameRules.coreCatchNumbers(seed = 42)
+        assertEquals(MiniGameRules.CORE_CATCH_CELLS, numbers.size)
+        // 決定的: 同じseedなら同じ配置
+        assertEquals(numbers, MiniGameRules.coreCatchNumbers(seed = 42))
+        // 1..25 の並べ替え(重複なし・全数含む)
+        assertEquals((1..MiniGameRules.CORE_CATCH_CELLS).toList(), numbers.sorted())
+        // seedが違えば並びも変わる(散らばっている)
+        assertTrue(numbers != MiniGameRules.coreCatchNumbers(seed = 7))
+    }
+
+    @Test
+    fun `core catch time limits scale by difficulty`() {
+        assertEquals(60_000L, MiniGameRules.coreCatchTimeLimitMs(MiniGameDifficulty.EASY))
+        assertEquals(40_000L, MiniGameRules.coreCatchTimeLimitMs(MiniGameDifficulty.NORMAL))
+        assertEquals(28_000L, MiniGameRules.coreCatchTimeLimitMs(MiniGameDifficulty.HARD))
+        assertEquals(20_000L, MiniGameRules.coreCatchTimeLimitMs(MiniGameDifficulty.ONI))
+    }
+
+    @Test
+    fun `core catch cleared includes the exact limit boundary`() {
+        val limit = MiniGameRules.coreCatchTimeLimitMs(MiniGameDifficulty.NORMAL)
+        assertTrue(MiniGameRules.coreCatchCleared(limit - 1, MiniGameDifficulty.NORMAL))
+        assertTrue(MiniGameRules.coreCatchCleared(limit, MiniGameDifficulty.NORMAL))
+        assertFalse(MiniGameRules.coreCatchCleared(limit + 1, MiniGameDifficulty.NORMAL))
+    }
+
+    @Test
+    fun `success rewards scale by difficulty`() {
+        assertEquals(2, MiniGameRules.successMood(MiniGameDifficulty.EASY))
+        assertEquals(3, MiniGameRules.successMood(MiniGameDifficulty.NORMAL))
+        assertEquals(4, MiniGameRules.successMood(MiniGameDifficulty.HARD))
+        assertEquals(5, MiniGameRules.successMood(MiniGameDifficulty.ONI))
+        assertEquals(1, MiniGameRules.successBond(MiniGameDifficulty.EASY))
+        assertEquals(1, MiniGameRules.successBond(MiniGameDifficulty.NORMAL))
+        assertEquals(2, MiniGameRules.successBond(MiniGameDifficulty.HARD))
+        assertEquals(2, MiniGameRules.successBond(MiniGameDifficulty.ONI))
+    }
+
+    @Test
+    fun `core catch succeeds only when reaching 25`() {
+        val full = MiniGameRules.resultFor(MiniGameKind.CORE_CATCH, 25, MiniGameDifficulty.HARD)
+        assertTrue(full.success)
+        assertEquals(25, full.score)
+        assertEquals(MiniGameDifficulty.HARD, full.difficulty)
+        val short = MiniGameRules.resultFor(MiniGameKind.CORE_CATCH, 24, MiniGameDifficulty.HARD)
+        assertFalse(short.success)
+        // clamp: 上限は25、下限は0
+        val over = MiniGameRules.resultFor(MiniGameKind.CORE_CATCH, 999, MiniGameDifficulty.NORMAL)
+        assertEquals(MiniGameRules.CORE_CATCH_CELLS, over.score)
+        assertTrue(over.success)
+        val under = MiniGameRules.resultFor(MiniGameKind.CORE_CATCH, -5, MiniGameDifficulty.NORMAL)
+        assertEquals(0, under.score)
+        assertFalse(under.success)
+    }
+
+    @Test
+    fun `resultFor defaults difficulty to normal`() {
+        val result = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, MiniGameRules.MEAL_SUCCESS_SCORE)
+        assertEquals(MiniGameDifficulty.NORMAL, result.difficulty)
     }
 
     @Test
@@ -55,7 +107,7 @@ class MiniGameRulesTest {
         val fail = MiniGameRules.resultFor(MiniGameKind.MEAL_BALANCE, MiniGameRules.MEAL_SUCCESS_SCORE - 1)
         assertFalse(fail.success)
         val clamped = MiniGameRules.resultFor(MiniGameKind.CORE_CATCH, 999)
-        assertEquals(MiniGameRules.CORE_CATCH_ROUNDS, clamped.score)
+        assertEquals(MiniGameRules.CORE_CATCH_CELLS, clamped.score)
     }
 
     @Test

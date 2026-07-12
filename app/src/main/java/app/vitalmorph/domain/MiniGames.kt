@@ -5,9 +5,20 @@ import kotlin.random.Random
 
 /** ミニゲームの種類(IMPLEMENTATION_PLAN.md Phase 3)。1回60〜90秒。 */
 enum class MiniGameKind(val label: String, val summary: String) {
-    CORE_CATCH("コアキャッチ", "光るコアが消える前にタップしてキャッチ！"),
+    CORE_CATCH("コアキャッチ", "1から25まで順番にタップ！時間内にコンプリートでクリア！"),
     PULSE_TRAINING("パルストレーニング", "パルスがリングに重なる瞬間にタップ！"),
     MEAL_BALANCE("ミールバランス", "食べ物のいちばん多い栄養素を当てよう！"),
+}
+
+/**
+ * ミニゲーム共通の難易度(U5で追加、U6/U7で全ゲームが利用する)。
+ * 難易度は制限時間や出題テンポなど各ゲームの調整と、成功時の報酬量に影響する。
+ */
+enum class MiniGameDifficulty(val label: String) {
+    EASY("初級"),
+    NORMAL("中級"),
+    HARD("上級"),
+    ONI("鬼"),
 }
 
 /** ミールバランスで答える主要栄養素。 */
@@ -24,6 +35,7 @@ data class MiniGameResult(
     val score: Int,
     val maxScore: Int,
     val success: Boolean,
+    val difficulty: MiniGameDifficulty = MiniGameDifficulty.NORMAL,
 )
 
 /**
@@ -31,29 +43,48 @@ data class MiniGameResult(
  * 報酬の1日上限は [InteractionEngine.onMiniGame] が管理する。
  */
 object MiniGameRules {
-    /** 機嫌・絆へ反映されるプレイ回数の上限(1日3回)。 */
+    /** 機嫌・絆へ反映されるプレイ回数の上限(1日3回)。難易度に関わらず共通。 */
     const val REWARDS_PER_DAY = 3
 
-    // ---- コアキャッチ: 3x3マスに次々現れるコアをタップ ----
-    const val CORE_CATCH_ROUNDS = 20
-    const val CORE_CATCH_CELLS = 9
-    const val CORE_CATCH_SHOW_MS = 1_100L
-    const val CORE_CATCH_INTERVAL_MS = 350L
-    const val CORE_CATCH_SUCCESS_SCORE = 12
-
-    /** 出現マスの列。同じマスが連続しないよう決定的に生成する。 */
-    fun coreCatchCells(seed: Int): List<Int> {
-        val random = Random(seed)
-        val cells = mutableListOf<Int>()
-        repeat(CORE_CATCH_ROUNDS) {
-            var next = random.nextInt(CORE_CATCH_CELLS)
-            if (cells.isNotEmpty() && next == cells.last()) {
-                next = (next + 1 + random.nextInt(CORE_CATCH_CELLS - 1)) % CORE_CATCH_CELLS
-            }
-            cells += next
-        }
-        return cells
+    /** 成功時の機嫌ボーナス。難易度が上がるほど大きい(1日3回の反映上限は共通のまま)。 */
+    fun successMood(difficulty: MiniGameDifficulty): Int = when (difficulty) {
+        MiniGameDifficulty.EASY -> 2
+        MiniGameDifficulty.NORMAL -> 3
+        MiniGameDifficulty.HARD -> 4
+        MiniGameDifficulty.ONI -> 5
     }
+
+    /** 成功時の絆ボーナス。難易度が上がるほど大きい(1日3回の反映上限は共通のまま)。 */
+    fun successBond(difficulty: MiniGameDifficulty): Int = when (difficulty) {
+        MiniGameDifficulty.EASY, MiniGameDifficulty.NORMAL -> 1
+        MiniGameDifficulty.HARD, MiniGameDifficulty.ONI -> 2
+    }
+
+    // ---- コアキャッチ: 5x5マスの1〜25を順番にタップ(U5でリニューアル) ----
+    /** グリッドのマス数(5x5)。得点は到達した番号(1〜25)。 */
+    const val CORE_CATCH_CELLS = 25
+
+    /** ミス1回あたりの経過時間ペナルティ。実時間へ加算して制限時間と比べる。 */
+    const val CORE_CATCH_MISTAKE_PENALTY_MS = 1_000L
+
+    /**
+     * 1〜25をseedで決定的にシャッフルした配置。indexがグリッド位置(row-major 5x5)、
+     * 値がそのマスに表示される番号。
+     */
+    fun coreCatchNumbers(seed: Int): List<Int> =
+        (1..CORE_CATCH_CELLS).shuffled(Random(seed))
+
+    /** 難易度ごとの制限時間(ミリ秒)。 */
+    fun coreCatchTimeLimitMs(difficulty: MiniGameDifficulty): Long = when (difficulty) {
+        MiniGameDifficulty.EASY -> 60_000L
+        MiniGameDifficulty.NORMAL -> 40_000L
+        MiniGameDifficulty.HARD -> 28_000L
+        MiniGameDifficulty.ONI -> 20_000L
+    }
+
+    /** 経過時間(ミス加算込み)が制限時間以内ならクリア。境界(==)はクリア扱い。 */
+    fun coreCatchCleared(elapsedMs: Long, difficulty: MiniGameDifficulty): Boolean =
+        elapsedMs <= coreCatchTimeLimitMs(difficulty)
 
     // ---- パルストレーニング: リングが閉じる瞬間(progress=1.0)にタップ ----
     const val PULSE_ROUNDS = 10
@@ -105,19 +136,27 @@ object MiniGameRules {
         mealQuestions.shuffled(Random(seed)).take(MEAL_ROUNDS)
 
     fun maxScoreFor(kind: MiniGameKind): Int = when (kind) {
-        MiniGameKind.CORE_CATCH -> CORE_CATCH_ROUNDS
+        MiniGameKind.CORE_CATCH -> CORE_CATCH_CELLS
         MiniGameKind.PULSE_TRAINING -> PULSE_MAX_SCORE
         MiniGameKind.MEAL_BALANCE -> MEAL_ROUNDS
     }
 
-    fun resultFor(kind: MiniGameKind, score: Int): MiniGameResult {
+    fun resultFor(kind: MiniGameKind, score: Int): MiniGameResult =
+        resultFor(kind, score, MiniGameDifficulty.NORMAL)
+
+    /**
+     * 難易度つきの成否判定。難易度は報酬とメッセージにのみ使い、成功条件は種類ごとに固定。
+     * コアキャッチは25(全マス到達)のみ成功。制限時間の判定はUI側で行い、時間内に
+     * 完走できたときだけscore=25を渡す(間に合わなければ到達番号を渡す)。
+     */
+    fun resultFor(kind: MiniGameKind, score: Int, difficulty: MiniGameDifficulty): MiniGameResult {
         val max = maxScoreFor(kind)
         val threshold = when (kind) {
-            MiniGameKind.CORE_CATCH -> CORE_CATCH_SUCCESS_SCORE
+            MiniGameKind.CORE_CATCH -> CORE_CATCH_CELLS
             MiniGameKind.PULSE_TRAINING -> PULSE_SUCCESS_SCORE
             MiniGameKind.MEAL_BALANCE -> MEAL_SUCCESS_SCORE
         }
         val clamped = score.coerceIn(0, max)
-        return MiniGameResult(kind, clamped, max, clamped >= threshold)
+        return MiniGameResult(kind, clamped, max, clamped >= threshold, difficulty)
     }
 }

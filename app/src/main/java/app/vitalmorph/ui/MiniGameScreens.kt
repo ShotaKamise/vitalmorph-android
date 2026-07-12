@@ -5,6 +5,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.vitalmorph.domain.MacroNutrient
+import app.vitalmorph.domain.MiniGameDifficulty
 import app.vitalmorph.domain.MiniGameKind
 import app.vitalmorph.domain.MiniGameRules
 import kotlinx.coroutines.delay
@@ -50,18 +53,21 @@ import kotlinx.coroutines.launch
 private val OverlayBackground = Color(0xFF0B1522)
 private val CoreColor = Color(0xFF69E6A6)
 private val AccentGold = Color(0xFFFFD166)
+private val MissRed = Color(0xFFFF6B6B)
 
 /**
- * ミニゲームの全画面オーバーレイ。タイミング・描画のみを持ち、
- * 判定とスコアは [MiniGameRules] に委ねる。
+ * ミニゲームの全画面オーバーレイ。まず難易度を選び、その後に各ゲームを描画する。
+ * タイミング・描画のみを持ち、判定とスコアは [MiniGameRules] に委ねる。
  */
 @Composable
 fun MiniGameOverlay(
     kind: MiniGameKind,
     seed: Int,
-    onFinish: (Int) -> Unit,
+    onFinish: (Int, MiniGameDifficulty) -> Unit,
     onCancel: () -> Unit,
 ) {
+    // 難易度未選択(null)のあいだは選択画面、選択後にゲーム本体を表示する。
+    var difficulty by remember(kind, seed) { mutableStateOf<MiniGameDifficulty?>(null) }
     Surface(modifier = Modifier.fillMaxSize(), color = OverlayBackground) {
         Column(
             modifier = Modifier
@@ -82,76 +88,170 @@ fun MiniGameOverlay(
                 OutlinedButton(onClick = onCancel) { Text("やめる") }
             }
             Spacer(Modifier.height(16.dp))
-            when (kind) {
-                MiniGameKind.CORE_CATCH -> CoreCatchGame(seed, onFinish)
-                MiniGameKind.PULSE_TRAINING -> PulseTrainingGame(onFinish)
-                MiniGameKind.MEAL_BALANCE -> MealBalanceGame(seed, onFinish)
+            val selected = difficulty
+            if (selected == null) {
+                DifficultySelector(kind) { difficulty = it }
+            } else {
+                when (kind) {
+                    MiniGameKind.CORE_CATCH -> CoreCatchGame(seed, selected, onFinish)
+                    // TODO(U6): パルストレーニングの難易度別チューニング。今は難易度を受け取り結果へ渡すのみ。
+                    MiniGameKind.PULSE_TRAINING -> PulseTrainingGame(selected, onFinish)
+                    // TODO(U7): ミールバランスの難易度別チューニング。今は難易度を受け取り結果へ渡すのみ。
+                    MiniGameKind.MEAL_BALANCE -> MealBalanceGame(seed, selected, onFinish)
+                }
             }
         }
     }
 }
 
+/** 難易度選択(全ミニゲーム共通)。ゲームごとの簡単な説明を添える。 */
 @Composable
-private fun CoreCatchGame(seed: Int, onFinish: (Int) -> Unit) {
-    val cells = remember(seed) { MiniGameRules.coreCatchCells(seed) }
-    var round by remember { mutableIntStateOf(0) }
-    var score by remember { mutableIntStateOf(0) }
-    var activeCell by remember { mutableIntStateOf(-1) }
-
-    LaunchedEffect(round) {
-        if (round >= cells.size) {
-            onFinish(score)
-            return@LaunchedEffect
+private fun DifficultySelector(kind: MiniGameKind, onSelect: (MiniGameDifficulty) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("難易度をえらぶ", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+        MiniGameDifficulty.entries.forEach { difficulty ->
+            val brief = when (kind) {
+                MiniGameKind.CORE_CATCH ->
+                    "制限時間 ${MiniGameRules.coreCatchTimeLimitMs(difficulty) / 1000}秒"
+                else -> "機嫌+${MiniGameRules.successMood(difficulty)}・絆+${MiniGameRules.successBond(difficulty)}"
+            }
+            Button(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                onClick = { onSelect(difficulty) },
+            ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(difficulty.label, fontWeight = FontWeight.Bold)
+                    Text(brief, style = MaterialTheme.typography.labelMedium)
+                }
+            }
         }
-        activeCell = cells[round]
-        delay(MiniGameRules.CORE_CATCH_SHOW_MS)
-        activeCell = -1
-        delay(MiniGameRules.CORE_CATCH_INTERVAL_MS)
-        round++
+    }
+}
+
+/**
+ * コアキャッチ(U5リニューアル): 5x5に散らばった1〜25を順番にタップする。
+ * 次に押す数字のマスは強調されない(それが難しさ)。ミスで+1秒ペナルティ。
+ * 実時間+ペナルティが制限時間を超えたら終了。時間内に25まで完走すれば成功。
+ */
+@Composable
+private fun CoreCatchGame(seed: Int, difficulty: MiniGameDifficulty, onFinish: (Int, MiniGameDifficulty) -> Unit) {
+    val numbers = remember(seed) { MiniGameRules.coreCatchNumbers(seed) }
+    val limitMs = remember(difficulty) { MiniGameRules.coreCatchTimeLimitMs(difficulty) }
+    var next by remember { mutableIntStateOf(1) } // 次に押すべき番号(1〜25)
+    var mistakes by remember { mutableIntStateOf(0) }
+    var penaltyMs by remember { mutableLongStateOf(0L) }
+    var elapsedMs by remember { mutableLongStateOf(0L) }
+    var wrongCell by remember { mutableIntStateOf(-1) } // 直近に押し間違えたマス(赤フラッシュ用)
+    var finished by remember { mutableStateOf(false) }
+
+    // 100msごとに実時間を進め、ペナルティ込みで制限時間を超えたら終了する。
+    LaunchedEffect(seed, difficulty) {
+        val startNs = System.nanoTime()
+        while (!finished) {
+            delay(100)
+            elapsedMs = (System.nanoTime() - startNs) / 1_000_000
+            if (elapsedMs + penaltyMs >= limitMs) {
+                finished = true
+                // 時間切れ: 到達した番号(next-1)を渡す。
+                onFinish(next - 1, difficulty)
+            }
+        }
     }
 
+    val totalMs = (elapsedMs + penaltyMs).coerceAtMost(limitMs)
+    val remainingMs = (limitMs - totalMs).coerceAtLeast(0L)
     Column {
-        GameStatusRow("コア ${round.coerceAtMost(cells.size)} / ${cells.size}", "スコア $score")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("残り ${formatTime(remainingMs)}", fontWeight = FontWeight.Bold, color = if (remainingMs < 5_000) MissRed else Color.White)
+            Text("次: ${next.coerceAtMost(MiniGameRules.CORE_CATCH_CELLS)}", fontWeight = FontWeight.Bold, color = AccentGold)
+            Text("ミス $mistakes", fontWeight = FontWeight.Bold, color = MissRed)
+        }
+        Spacer(Modifier.height(8.dp))
+        // 残り時間バー
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(4.dp)),
+        ) {
+            val fraction = if (limitMs == 0L) 0f else (remainingMs.toFloat() / limitMs)
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
+                    .height(8.dp)
+                    .background(if (remainingMs < 5_000) MissRed else CoreColor, RoundedCornerShape(4.dp)),
+            )
+        }
         Spacer(Modifier.height(14.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            repeat(3) { rowIndex ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    repeat(3) { colIndex ->
-                        val cellIndex = rowIndex * 3 + colIndex
-                        val isActive = cellIndex == activeCell
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(5) { rowIndex ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    repeat(5) { colIndex ->
+                        val cellIndex = rowIndex * 5 + colIndex
+                        val value = numbers[cellIndex]
+                        val done = value < next
+                        val isWrong = cellIndex == wrongCell
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .aspectRatio(1f)
                                 .background(
-                                    if (isActive) CoreColor.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.06f),
-                                    RoundedCornerShape(18.dp),
+                                    when {
+                                        done -> CoreColor.copy(alpha = 0.18f)
+                                        else -> Color.White.copy(alpha = 0.08f)
+                                    },
+                                    RoundedCornerShape(12.dp),
                                 )
-                                .clickable(enabled = isActive) {
-                                    if (cellIndex == activeCell) {
-                                        score++
-                                        activeCell = -1
+                                .then(
+                                    if (isWrong) Modifier.border(2.dp, MissRed, RoundedCornerShape(12.dp)) else Modifier,
+                                )
+                                .clickable(enabled = !done && !finished) {
+                                    if (value == next) {
+                                        next++
+                                        wrongCell = -1
+                                        if (next > MiniGameRules.CORE_CATCH_CELLS) {
+                                            // 25まで完走。時間内なので成功スコア25を渡す。
+                                            finished = true
+                                            onFinish(MiniGameRules.CORE_CATCH_CELLS, difficulty)
+                                        }
+                                    } else {
+                                        mistakes++
+                                        penaltyMs += MiniGameRules.CORE_CATCH_MISTAKE_PENALTY_MS
+                                        wrongCell = cellIndex
                                     }
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (isActive) Text("●", fontSize = 34.sp, color = OverlayBackground)
+                            if (done) {
+                                Text("✓", fontSize = 18.sp, color = CoreColor)
+                            } else {
+                                Text("$value", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
                         }
                     }
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
-            "${MiniGameRules.CORE_CATCH_SUCCESS_SCORE}個キャッチでクリア！",
+            "1から25まで順番にタップ！ミスは+1秒。",
             style = MaterialTheme.typography.bodySmall,
             color = AccentGold,
         )
     }
 }
 
+/** 経過時間をm:ss.d(0.1秒)で整形する。 */
+private fun formatTime(ms: Long): String {
+    val totalTenths = ms / 100
+    val minutes = totalTenths / 600
+    val seconds = (totalTenths / 10) % 60
+    val tenths = totalTenths % 10
+    return "%d:%02d.%d".format(minutes, seconds, tenths)
+}
+
 @Composable
-private fun PulseTrainingGame(onFinish: (Int) -> Unit) {
+private fun PulseTrainingGame(difficulty: MiniGameDifficulty, onFinish: (Int, MiniGameDifficulty) -> Unit) {
     var round by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
     var lastJudge by remember { mutableStateOf<String?>(null) }
@@ -160,7 +260,7 @@ private fun PulseTrainingGame(onFinish: (Int) -> Unit) {
 
     LaunchedEffect(round) {
         if (round >= MiniGameRules.PULSE_ROUNDS) {
-            onFinish(score)
+            onFinish(score, difficulty)
             return@LaunchedEffect
         }
         progress.snapTo(0f)
@@ -215,14 +315,14 @@ private fun PulseTrainingGame(onFinish: (Int) -> Unit) {
 }
 
 @Composable
-private fun MealBalanceGame(seed: Int, onFinish: (Int) -> Unit) {
+private fun MealBalanceGame(seed: Int, difficulty: MiniGameDifficulty, onFinish: (Int, MiniGameDifficulty) -> Unit) {
     val questions = remember(seed) { MiniGameRules.mealRound(seed) }
     var index by remember { mutableIntStateOf(0) }
     var score by remember { mutableIntStateOf(0) }
     var feedback by remember { mutableStateOf<String?>(null) }
 
     if (index >= questions.size) {
-        LaunchedEffect(Unit) { onFinish(score) }
+        LaunchedEffect(Unit) { onFinish(score, difficulty) }
         return
     }
     val question = questions[index]
