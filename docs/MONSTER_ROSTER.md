@@ -50,17 +50,19 @@
 
 7職業それぞれについて、成熟体と最終形態をオス・メスで制作済み。下記IDはセーブデータで利用できる正式IDとし、公開後は変更しない。
 
-| 職業 | 系統 | オス成熟（ID） | オス最終（ID） | メス成熟（ID） | メス最終（ID） |
-|---|---|---|---|---|---|
-| 剣士 | 調和 | レオンセイバー (`leon_saber_m`) | ソルレグナード (`sol_regnard_m`) | ヴァレリア (`valeria_f`) | ヴァルローゼ (`val_rose_f`) |
-| 二刀流剣士 | 俊足 | ツインファング (`twin_fang_m`) | ゼロデュアリオン (`zero_dualion_m`) | リラツイン (`lila_twin_f`) | ルミナデュエラ (`lumina_duella_f`) |
-| 大剣使い | 筋力 | グランブレイカー (`grand_breaker_m`) | タイタングレイヴ (`titan_glaive_m`) | クリムアージュ (`crim_arge_f`) | グランエンプレス (`grand_empress_f`) |
-| 槍使い | 俊足 | ヴォルトランサー (`volt_lancer_m`) | テンペストドラグーン (`tempest_dragoon_m`) | セレスランサー (`celes_lancer_f`) | アストラレイナ (`astra_reina_f`) |
-| ショットガン使い | 過活動 | バレルガード (`barrel_guard_m`) | アークバスター (`arc_buster_m`) | ルージュシェル (`rouge_shell_f`) | ノヴァバレリア (`nova_valeria_f`) |
-| 魔法使い | 静養 | ルーンセージ (`rune_sage_m`) | アストラマギウス (`astra_magius_m`) | ミスティカ (`mystica_f`) | エクリプシア (`eclipsia_f`) |
-| 忍者 | 静養 | カゲロウ (`kagerou_m`) | ムゲンシノビ (`mugen_shinobi_m`) | ヨイヅキ (`yoidzuki_f`) | ツキカゲヒメ (`tsukikage_hime_f`) |
+| 職業 | 系統 | 色 | オス成熟（ID） | オス最終（ID） | メス成熟（ID） | メス最終（ID） |
+|---|---|---|---|---|---|---|
+| 剣士 | 調和 | 赤 | レオンセイバー (`leon_saber_m`) | ソルレグナード (`sol_regnard_m`) | ヴァレリア (`valeria_f`) | ヴァルローゼ (`val_rose_f`) |
+| 二刀流剣士 | 俊足 | 青 | ツインファング (`twin_fang_m`) | ゼロデュアリオン (`zero_dualion_m`) | リラツイン (`lila_twin_f`) | ルミナデュエラ (`lumina_duella_f`) |
+| 大剣使い | 筋力 | 緑 | グランブレイカー (`grand_breaker_m`) | タイタングレイヴ (`titan_glaive_m`) | クリムアージュ (`crim_arge_f`) | グランエンプレス (`grand_empress_f`) |
+| 槍使い | 俊足 | 黄 | ヴォルトランサー (`volt_lancer_m`) | テンペストドラグーン (`tempest_dragoon_m`) | セレスランサー (`celes_lancer_f`) | アストラレイナ (`astra_reina_f`) |
+| ショットガン使い | 過活動 | 黒 | バレルガード (`barrel_guard_m`) | アークバスター (`arc_buster_m`) | ルージュシェル (`rouge_shell_f`) | ノヴァバレリア (`nova_valeria_f`) |
+| 魔法使い | 静養 | 白 | ルーンセージ (`rune_sage_m`) | アストラマギウス (`astra_magius_m`) | ミスティカ (`mystica_f`) | エクリプシア (`eclipsia_f`) |
+| 忍者 | 静養 | 紫 | カゲロウ (`kagerou_m`) | ムゲンシノビ (`mugen_shinobi_m`) | ヨイヅキ (`yoidzuki_f`) | ツキカゲヒメ (`tsukikage_hime_f`) |
 
 全28体の比較画像は `art/humanoid-roster-preview.png`、個別のアプリ素材は `app/src/main/res/drawable-nodpi/monster_<ID>.webp` に置く。
+
+オス人型は成人男性ベースとし、獣人、動物頭、全身毛皮の方向にはしない。モンスターらしさは鎧、武器、生命コア、魔力エフェクト、最終形態のシルエット強化で表現する。
 
 ## 女性人型の外見方針
 

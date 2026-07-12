@@ -40,7 +40,19 @@ Avoid: photorealism, pixel art, cropped limbs, combined creatures, copyrighted c
 
 ![人型28体](humanoid-roster-preview.png)
 
-新しい43枠構成へ向け、7職業 x 男女 x 成熟体・最終形態の28体を制作した。正式名とIDは `docs/MONSTER_ROSTER.md` を参照する。
+新しい43枠構成へ向け、7職業 x 男女 x 成熟体・最終形態の28体を制作した。男性キャラクターは獣人ではなく成人男性ベースに統一し、モンスターらしさは装備、生命コア、エフェクト、シルエットで表現する。正式名とIDは `docs/MONSTER_ROSTER.md` を参照する。
+
+職業ごとのベースカラーは次の7色で固定する。
+
+| 職業 | ベースカラー |
+|---|---|
+| 剣士 | 赤 |
+| 二刀流剣士 | 青 |
+| 大剣使い | 緑 |
+| 槍使い | 黄 |
+| ショットガン使い | 黒 |
+| 魔法使い | 白 |
+| 忍者 | 紫 |
 
 生成には組み込み画像生成を使い、男性成熟体、男性最終形態、女性成熟体、女性最終形態の4シートに分けた。共通プロンプト仕様は次の通り。
 
@@ -50,7 +62,10 @@ Asset type: Android monster-raising game humanoid character sheet
 Primary request: seven original humanoid monsters in a strict 7-column lineup:
 sword, dual blades, greatsword, spear, shotgun, mage, ninja.
 Style: premium Japanese fantasy RPG illustration, deep-navy outlines, cel shading,
-blue/gold shared life-core emblem, readable silhouette, front three-quarter full body.
+deep-navy/gold shared life-core emblem, readable silhouette, front three-quarter full body.
+Male characters: adult human-based men, not beastmen, not animal-headed, not furry.
+Role colors: sword red, dual blades blue, greatsword green, spear yellow,
+shotgun black, mage white, ninja purple.
 Progression: final forms preserve their role while gaining more elaborate armor,
 weapons, energy effects, authority, and a clearly stronger silhouette.
 Women: unmistakably adult, glamorous and attractive, fitted fantasy battle outfits,
